@@ -1,7 +1,7 @@
-
 #include "xctmp.h"
 
 
+#if 0
 struct xctmp_chunk_t {
 	enum xctmp_chunk_type {
 		CHUNK_TEXT,
@@ -51,4 +51,4 @@ xctmp_destroy(xctmp_t * xc){
 	delete xc;
 }
 
-
+#endif

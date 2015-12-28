@@ -5,19 +5,16 @@
 using namespace std;
 
 int main(){
+    xctmp_env_t env;
 
-	xctmp_env_t	env;
-	env[string("hello")] = xctmp_env_value_t("world");
-	env.operator[]<int64_t>(string("hello1")) = int64_t(1);
-	env.operator[]<void*>(string("hello3")) = (void*)main;
-	xctmp_env_t e2;
-	e2.operator[]<string>(string("hello")) = string("world");
-	e2.operator[]<int64_t>(string("hello1")) = int64_t(1);
-	e2.operator[]<void*>(string("hello3")) = (void*)main;
+    env = 20;
+    env["hello1"] = 456;
+    env["hello2"] = 6.0f;
+    env["hello3"] = string("world");
+    xctmp_env_t ev2;
+    ev2["hello11"] = string("hahaha");
+    env["hello4"] = ev2;
 
-	env.operator[]<xctmp_env_t>(string("hello4")) = e2;
-
-	cout << env.str() << endl;
-	cout << env.path("hello") << endl;
-
+    cout << env.str()<< endl;
+    return 0;
 }

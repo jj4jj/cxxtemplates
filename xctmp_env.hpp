@@ -26,6 +26,8 @@ struct xctmp_env_t {
     } type;
     typedef std::unordered_map<std::string, xctmp_env_t*>	dict_t;
     dict_t	dict;
+    static xctmp_env_t  empty;
+    ///////////////////////////////////////////////////////////////
     ~xctmp_env_t(){
         for (auto it : dict){
             delete it.second;
@@ -55,7 +57,7 @@ struct xctmp_env_t {
         uv_.i64 = i;
     }
 
-    void move(xctmp_env_t & rhs_){
+    xctmp_env_t & move(xctmp_env_t & rhs_){
         if (this != &rhs_){
             type = rhs_.type;
             str_ = rhs_.str();
@@ -65,8 +67,9 @@ struct xctmp_env_t {
             func_ = rhs_.func_;
             rhs_.dict.clear();
         }
+        return *this;
     }
-    void copy(xctmp_env_t & rhs_){
+    xctmp_env_t & copy(xctmp_env_t & rhs_){
         if (this != &rhs_){
             type = rhs_.type;
             str_ = rhs_.str();
@@ -76,18 +79,19 @@ struct xctmp_env_t {
                 this->operator[](it.first) = *(it.second);
             }
         }
+        return *this;
     }
     xctmp_env_t(xctmp_env_t && rhs_){ // move syn
         move(rhs_);
     }
     xctmp_env_t & operator = (xctmp_env_t && rhs_){ // move syn
-        move(rhs_);
+        return move(rhs_);
     }
     xctmp_env_t(xctmp_env_t & rhs_){ // move syn
         copy(rhs_);
     }
     xctmp_env_t & operator = (xctmp_env_t & rhs_){ // move syn
-        copy(rhs_);
+        return copy(rhs_);
     }
     ////////////////////////////////////////////////
     template<typename T>
@@ -113,6 +117,16 @@ struct xctmp_env_t {
         if (!e){e = (dict)[key] = new xctmp_env_t();}
         return *e;
     }
+    const xctmp_env_t & operator [](const std::string & key) const {
+        if (type != VALUE_ENV){
+            return empty;
+        }
+        auto it = dict.find(key);
+        if (it == dict.end()){
+            return *it->second;
+        }
+        return empty;
+    }
     xctmp_env_t & path(const std::string & pth){
         if (pth.empty()){
             return *this;
@@ -121,7 +135,21 @@ struct xctmp_env_t {
         std::string cp = pth.substr(0, fnd);
         xctmp_env_t & env = this->operator[](cp);
         if (fnd == std::string::npos){//hello
-            return env[cp];
+            return env;
+        }
+        else {//[hello].hello
+            return env[pth.substr(fnd + 1)];
+        }
+    }
+    const xctmp_env_t & path(const std::string & pth) const {
+        if (pth.empty()){
+            return *this;
+        }
+        auto fnd = pth.find('.');//hello.hello
+        std::string cp = pth.substr(0, fnd);
+        const xctmp_env_t & env = this->operator[](cp);
+        if (fnd == std::string::npos){//hello
+            return env;
         }
         else {//[hello].hello
             return env[pth.substr(fnd + 1)];
@@ -136,7 +164,11 @@ struct xctmp_env_t {
         }
         if (type == VALUE_FUNC){
             char buff[32];
-            snprintf(buff, sizeof(buff), "function(%p)",func_);
+#ifdef WIN32
+            sprintf(buff, "function(%p)", func_);
+#else
+            snprintf(buff, sizeof(buff), "function(%p)", func_);
+#endif
             return buff;
         }
         if (type == VALUE_ENV){
@@ -152,5 +184,6 @@ struct xctmp_env_t {
             v += "}";
             return v;
         }
+        return "";
     }
 };

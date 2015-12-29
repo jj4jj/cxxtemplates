@@ -3,6 +3,34 @@
 #include <stack>
 #include <iostream>
 
+static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n#"){
+    auto begmatch = str.begin();
+    int count = 0;
+    while (begmatch != str.end()){
+        if (strchr(trimchar, *begmatch)){
+            ++begmatch;
+            ++count;
+        }
+        break;
+    }
+    if (str.begin() < begmatch){
+        str.erase(str.begin(), begmatch);
+    }
+    //
+    auto rbegmatch = str.end();
+    while (rbegmatch != str.begin()){
+        if (strchr(trimchar, *rbegmatch)){
+            --rbegmatch;
+            ++count;
+        }
+        break;
+    }
+    if (rbegmatch != str.end()){
+        str.erase(rbegmatch + 1, str.end());
+    }
+    return  count;
+}
+
 struct xctmp_chunk_t {
     std::string text;
     enum xctmp_chunk_type {
@@ -23,8 +51,10 @@ struct xctmp_chunk_t {
         if (type == CHUNK_TEXT){
             return 0;
         }
+        _strtrim(text);
         if (text.find("#") == 0){
             type = CHUNK_COMMENT;
+            text.erase(0);
         }
         else if (strchr(text.c_str(), '+') ||
             strchr(text.c_str(), '-') ||
@@ -110,6 +140,7 @@ xctmp_render(xctmp_t * xc, std::string & output, xctmp_env_t & env){
 			output.append(it->text);
 			break;
 		case xctmp_chunk_t::CHUNK_VAR:
+            std::clog << "evaluate var :" << it->text << std::endl;
 			output.append(env.path(it->text).str());
 			break;
 		case xctmp_chunk_t::CHUNK_EXPR:

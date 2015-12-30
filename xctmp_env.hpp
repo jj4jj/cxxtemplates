@@ -155,7 +155,7 @@ struct xctmp_env_t {
             return env[pth.substr(fnd + 1)];
         }
     }
-    std::string str(){
+    std::string str() const {
         if (type == VALUE_INT){
             return std::to_string(uv_.i64);
         }

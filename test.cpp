@@ -10,9 +10,10 @@ string lowercase(const std::string & v){
 }
 
 int main(){
+#if 0
 	try {
-//		regex   re("^([a-zA-Z][a-zA-Z0-9_]*)(\\.[a-zA-Z][a-zA-Z0-9_]*)*", regex::ECMAScript);
-		regex   re("^[a-zA-Z]", regex::ECMAScript);
+		regex   re("^([a-zA-Z][a-zA-Z0-9_]*)(\\.[a-zA-Z][a-zA-Z0-9_]*)*", regex::ECMAScript);
+		//		regex   re("^[a-zA-Z]", regex::ECMAScript); //must g++4.9+
 		string s = "hello.w_orld.yes3 + x + y + z";
 		smatch m;
 		auto ret = std::regex_search(s, m, re);
@@ -36,19 +37,18 @@ int main(){
 		return -1;
 	}
     cout << "=================================" << endl;
+#endif
 
-
-#if 1
     string output;
     xctmp_t * xc =  xctmp_parse("\
     #include \"{{file}}\"\n\
     struct {{struct}}{ \n\
         {{ 5+4.46/7 }}\n\
         {{field.type}} {{field.name | lowercase }}\n\
-        {{if field.array}}\n\
+        {{!if field.array}}\n\
         [{{field.count}}];\n\
-        {{elif field.type = \"message\" }}\n\
-        {{ else }}\n\
+        {{!elif field.type = \"message\" }}\n\
+        {{!else }}\n\
         {{}}\n\
         {{}}\n\
     };");
@@ -68,6 +68,5 @@ int main(){
     xctmp_render(xc, output, env);
     cout << "reder:" << endl
         << output << endl;
-#endif
     return 0;
 }

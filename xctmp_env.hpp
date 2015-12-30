@@ -122,7 +122,7 @@ struct xctmp_env_t {
             return empty;
         }
         auto it = dict.find(key);
-        if (it == dict.end()){
+        if (it != dict.end()){
             return *it->second;
         }
         return empty;

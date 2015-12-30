@@ -10,26 +10,31 @@ string lowercase(const std::string & v){
 }
 
 int main(){
-    regex   re("^([a-zA-Z][a-zA-Z0-9_]*)(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
-    string s = "hello.w_orld.yes3 + x + y + z";
-    smatch m;
-    auto ret = std::regex_search(s, m, re);
-    cout << "ret:" << ret << endl;
-    if (ret){
-        cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
-    }
+	try {
+//		regex   re("^([a-zA-Z][a-zA-Z0-9_]*)(\\.[a-zA-Z][a-zA-Z0-9_]*)*", regex::ECMAScript);
+		regex   re("^[a-zA-Z]", regex::ECMAScript);
+		string s = "hello.w_orld.yes3 + x + y + z";
+		smatch m;
+		auto ret = std::regex_search(s, m, re);
+		cout << "ret:" << ret << endl;
+		if (ret){
+			cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
+		}
 
-    static const std::regex   str_re("\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
-    string s2 = "\"hello.\\\"w_orld.yes3\\\" + x + y + z\" a b c";
-    m;
-    ret = std::regex_search(s2, m, str_re);
-    cout << "ret:" << ret << endl;
-    if (ret){
-        cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
-    }
-
-
-
+		static const std::regex   str_re("\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
+		string s2 = "\"hello.\\\"w_orld.yes3\\\" + x + y + z\" a b c";
+		m;
+		ret = std::regex_search(s2, m, str_re);
+		cout << "ret:" << ret << endl;
+		if (ret){
+			cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
+		}
+	
+	}
+	catch (regex_error rer){
+		cout <<"cl error :" << rer.what() << endl;
+		return -1;
+	}
     cout << "=================================" << endl;
 
 

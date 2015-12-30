@@ -3,6 +3,7 @@
 #include <stack>
 #include <iostream>
 #include <regex>
+xctmp_env_t	xctmp_env_t::empty;
 
 static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n#"){
     auto begmatch = str.begin();
@@ -82,10 +83,6 @@ struct xctmp_token_t {
 };
 
 //static const std::regex   digit_re("^\\d");
-static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
-static const std::regex   str_re_1("\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
-static const std::regex   str_re_2("'(([^\\']\\')|[^'])*'"); //"(([^\"]\")|[^"])*"
-
 static int 
 _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
     xctmp_token_t tok;
@@ -103,7 +100,11 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
             toklist.push_back(tok);
             continue;
         }
-        tok.type = xctmp_token_t::TOKEN_NIL;
+		static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
+		static const std::regex   str_re_1("^\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
+		static const std::regex   str_re_2("^'(([^\\']\\')|[^'])*'"); //"(([^\"]\")|[^"])*"
+
+		tok.type = xctmp_token_t::TOKEN_NIL;
         ////////////////////////////////////////
         switch (*pcs){
         case '+':
@@ -475,7 +476,12 @@ xctmp_render(xctmp_t * xc, std::string & output, xctmp_env_t & env){
 			break;
 		case xctmp_chunk_t::CHUNK_EXPR:
             result = _eval_expr(*it, env);
-			output.append();
+			if (result.type == xctmp_token_t::TOKEN_STRING){
+				output.append(result.value);
+			}
+			else if (result.type == xctmp_token_t::TOKEN_NUM){
+				output.append(std::to_string(result.digit));
+			}
 			break;
 		case xctmp_chunk_t::CHUNK_COMMENT:
 			break;

@@ -39,24 +39,142 @@ struct xctmp_token_t {
         //id, num
         TOKEN_ID,
         TOKEN_NUM,
+        TOKEN_STRING,
         //+-*/|()
         TOKEN_PLUS,
         TOKEN_MINUS,
         TOKEN_PRODUCT,
         TOKEN_DIV,
         TOKEN_FILTER,
+        TOKEN_EQ,
+        ///////////////////
+
         TOKEN_BRACKET_LEFT,
         TOKEN_BRACKET_RIGHT,
     } type;
 };
+
+//static const std::regex   digit_re("^\\d");
+static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
+static const std::regex   str_re_1("\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
+static const std::regex   str_re_2("'(([^\\']\\')|[^'])*'"); //"(([^\"]\")|[^"])*"
+
+static int 
+_expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
+    xctmp_token_t tok;
+    char * pend;
+    //----------------------------------------
+    const char * pcs = text.c_str();
+    std::smatch m;
+    while (true && *pcs){
+        tok.text.clear();
+        tok.digit = strtof(pcs, &pend);
+        if (pend != pcs){ //digit
+            tok.type = xctmp_token_t::TOKEN_NUM;
+            tok.text.assign(pcs, pend - pcs);
+            pcs = pend;
+            toklist.push_back(tok);
+            continue;
+        }
+        tok.type = xctmp_token_t::TOKEN_NIL;
+        ////////////////////////////////////////
+        switch (*pcs){
+        case '+':
+            tok.type = xctmp_token_t::TOKEN_PLUS;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case '-':
+            tok.type = xctmp_token_t::TOKEN_MINUS;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case '*':
+            tok.type = xctmp_token_t::TOKEN_PRODUCT;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case '/':
+            tok.type = xctmp_token_t::TOKEN_DIV;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case '|':
+            tok.type = xctmp_token_t::TOKEN_FILTER;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case '(':
+            tok.type = xctmp_token_t::TOKEN_BRACKET_LEFT;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case ')':
+            tok.type = xctmp_token_t::TOKEN_BRACKET_RIGHT;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case '=':
+            tok.type = xctmp_token_t::TOKEN_EQ;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
+        case ' ':
+        case '\t':
+        case '\r':
+        case '\n':
+            ++pcs;
+            break;
+        case '"':
+            if (std::regex_search(std::string(pcs), m, str_re_1)){
+                tok.type = xctmp_token_t::TOKEN_STRING;
+                tok.text = m.str();
+                pcs += m.length();
+            }
+            else {
+                std::cerr << "ilegal literal :" << pcs << std::endl;
+                return -1;
+            }
+            break;
+        case '\'':
+            if (std::regex_search(std::string(pcs), m, str_re_2)){
+                tok.type = xctmp_token_t::TOKEN_STRING;
+                tok.text = m.str();
+                pcs += m.length();
+            }
+            else {
+                std::cerr << "ilegal literal :" << pcs << std::endl;
+                return -1;
+            }
+            break;
+        default:
+            if (std::regex_search(std::string(pcs), m, var_re)){
+                tok.type = xctmp_token_t::TOKEN_ID;
+                tok.text = m.str();
+                pcs += m.length();
+            }
+            else {
+                std::cerr << "ilegal literal :" << pcs << std::endl;
+                return -1;
+            }
+            break;
+        }
+        if (tok.type == xctmp_token_t::TOKEN_NIL){
+            continue;
+        }
+        toklist.push_back(tok);
+    }
+    return 0;
+}
+
 
 struct xctmp_chunk_t {
     std::string text;
     enum xctmp_chunk_type {
         CHUNK_UNKNOWN,
         CHUNK_TEXT,
-        CHUNK_VAR,
         CHUNK_EXPR,
+        CHUNK_BLOCK_END,
         CHUNK_COMMENT,
     } type;
     std::list<xctmp_token_t>    toklist;
@@ -73,93 +191,17 @@ struct xctmp_chunk_t {
             return 0;
         }
         _strtrim(text);
-        if (text.find("#") == 0){
+        if (text.empty()){
+            type = CHUNK_BLOCK_END;
+        }
+        else if (text.find("#") == 0){
             type = CHUNK_COMMENT;
             text.erase(0);
         }
-        else if (strchr(text.c_str(), '+') ||
-            strchr(text.c_str(), '-') ||
-            strchr(text.c_str(), '/') ||
-            strchr(text.c_str(), '*') ||
-            strchr(text.c_str(), '|') ||
-            strchr(text.c_str(), ' ') || 
-            strchr(text.c_str(), '\t') ||
-            strchr(text.c_str(), '\r') ||
-            strchr(text.c_str(), '\n')){
+        else {
             type = CHUNK_EXPR;
             ////////////////////////////////////
-            xctmp_token_t tok;
-            char * pend;
-            //----------------------------------------
-            const char * pcs = text.c_str();
-            while (true && *pcs){
-                tok.digit = strtof(pcs, &pend);
-                if (pend != pcs){ //not matched
-                    tok.type = xctmp_token_t::TOKEN_NUM;
-                    tok.text.assign(pcs, pend - pcs);
-                    pcs = pend;
-                    toklist.push_back(tok);
-                    continue;
-                }
-                tok.type = xctmp_token_t::TOKEN_NIL;
-                ////////////////////////////////////////
-                switch (*pcs){
-                case '+':
-                    tok.type = xctmp_token_t::TOKEN_PLUS;
-                    break;
-                case '-':
-                    tok.type = xctmp_token_t::TOKEN_MINUS;
-                    break;
-                case '*':
-                    tok.type = xctmp_token_t::TOKEN_PRODUCT;
-                    break;
-                case '/':
-                    tok.type = xctmp_token_t::TOKEN_DIV;
-                    break;
-                case '|':
-                    tok.type = xctmp_token_t::TOKEN_FILTER;
-                    break;
-                case '(':
-                    tok.type = xctmp_token_t::TOKEN_BRACKET_LEFT;
-                    break;
-                case ')':
-                    tok.type = xctmp_token_t::TOKEN_BRACKET_RIGHT;
-                    break;
-                case ' ':
-                case '\t':
-                case '\r':
-                case '\n':
-                    break;
-                default:
-                    //match ([a-zA-Z][a-A-Z0-9_]*)[.\1]*
-                    const std::regex var_regex("^([a-zA-Z][a-A-Z0-9_]*)(\\.\\1)*");
-                    std::smatch m;
-                    std::regex_search(text, m, var_regex);
-                    if (m.empty()){
-                        std::cerr << "ilegal literal :%s!" << text << std::endl;
-                        return -1;
-                    }
-                    else {
-                        for (auto & it : m){
-                            std::clog << "debug match:" << it << std::endl;
-                        }
-                        tok.type = xctmp_token_t::TOKEN_ID;
-                        tok.text = m[0];
-                        pcs += tok.text.length();
-                    }
-                    break;
-                }
-                if (tok.type != xctmp_token_t::TOKEN_ID){
-                    ++pcs; //shift one char
-                }
-                if (tok.type == xctmp_token_t::TOKEN_NIL){
-                    continue;
-                }
-                toklist.push_back(tok);
-            }
-        }
-        else {
-            type = CHUNK_VAR;
+            return _expr_parse(toklist, text);
         }
         return 0;
     }
@@ -224,7 +266,7 @@ xctmp_parse(const std::string & text){
 }
 static inline std::string 
 _eval_expr(const xctmp_chunk_t & chk, xctmp_env_t & env){
-    std::clog << "debug expresion: "<< chk.text << std::endl;
+    //std::clog << "parsing: "<< chk.text << std::endl;
     for (auto & tok : chk.toklist){
         std::clog << tok.text << std::endl;
     }
@@ -237,10 +279,6 @@ xctmp_render(xctmp_t * xc, std::string & output, xctmp_env_t & env){
 		switch (it->type){
 		case xctmp_chunk_t::CHUNK_TEXT:
 			output.append(it->text);
-			break;
-		case xctmp_chunk_t::CHUNK_VAR:
-            std::clog << "evaluate var :" << it->text << std::endl;
-			output.append(env.path(it->text).str());
 			break;
 		case xctmp_chunk_t::CHUNK_EXPR:
 			output.append(_eval_expr(*it, env));

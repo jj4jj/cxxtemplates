@@ -1,6 +1,8 @@
 
 #include "xctmp.h"
 #include "iostream"
+#include <regex>
+
 using namespace std;
 
 string lowercase(const std::string & v){
@@ -8,6 +10,30 @@ string lowercase(const std::string & v){
 }
 
 int main(){
+    regex   re("^([a-zA-Z][a-zA-Z0-9_]*)(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
+    string s = "hello.w_orld.yes3 + x + y + z";
+    smatch m;
+    auto ret = std::regex_search(s, m, re);
+    cout << "ret:" << ret << endl;
+    if (ret){
+        cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
+    }
+
+    static const std::regex   str_re("\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
+    string s2 = "\"hello.\\\"w_orld.yes3\\\" + x + y + z\" a b c";
+    m;
+    ret = std::regex_search(s2, m, str_re);
+    cout << "ret:" << ret << endl;
+    if (ret){
+        cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
+    }
+
+
+
+    cout << "=================================" << endl;
+
+
+#if 1
     string output;
     xctmp_t * xc =  xctmp_parse("\
     #include \"{{file}}\"\n\
@@ -16,7 +42,7 @@ int main(){
         {{field.type}} {{field.name | lowercase }}\n\
         {{if field.array}}\n\
         [{{field.count}}];\n\
-        {{elif field.type == \"message\" }}\n\
+        {{elif field.type = \"message\" }}\n\
         {{ else }}\n\
         {{}}\n\
         {{}}\n\
@@ -37,5 +63,6 @@ int main(){
     xctmp_render(xc, output, env);
     cout << "reder:" << endl
         << output << endl;
+#endif
     return 0;
 }

@@ -41,10 +41,11 @@ int main(){
 
     string output;
     xctmp_t * xc =  xctmp_parse("\
-    #include \"{{file}}\"\n\
+	{{field.name | lowercase }}\
+	{{ 3 - 2 / ( 7  + 5 )}}\n\
+	#include \"{{file}}\"\n\
     struct {{struct}}{ \n\
-        {{ 5+4.46/7 }}\n\
-        {{field.type}} {{field.name | lowercase }}\n\
+        {{field.type}}\n\
         {{!if field.array}}\n\
         [{{field.count}}];\n\
         {{!elif field.type = \"message\" }}\n\

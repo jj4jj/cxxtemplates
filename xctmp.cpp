@@ -5,7 +5,7 @@
 #include <regex>
 xctmp_env_t	xctmp_env_t::empty;
 
-static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n#"){
+static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n"){
     auto begmatch = str.begin();
     int count = 0;
     while (begmatch != str.end()){
@@ -33,9 +33,10 @@ static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n#"
     return  count;
 }
 struct xctmp_token_t {
-    std::string text;
-    std::string value;
-    long double digit;
+    std::string text; //static from tempalte buffer
+    std::string value;//dynamic value binding
+    long double digit; //dyn
+	xctmp_func_t  fptr; //dyn
     enum xctmp_token_type {
         TOKEN_ERROR = -1,
         //empty
@@ -60,10 +61,16 @@ struct xctmp_token_t {
         TOKEN_BRACKET_LEFT ,
         TOKEN_BRACKET_RIGHT,
     } type;
+	bool is_op(){
+		return priority() >= 100 && priority() <= 200;
+	}
     int priority() const {
+		//common	50
+		//op 100 - 200	()
+		//
         switch (type){
         case TOKEN_EQ:
-            return 100;
+            return 110;
         case TOKEN_PLUS:
         case TOKEN_MINUS:
             return 150;
@@ -74,10 +81,11 @@ struct xctmp_token_t {
             return 180;
                 ///////////////////
         case TOKEN_BRACKET_LEFT:
+			return 100;
         case TOKEN_BRACKET_RIGHT:
             return 200;
         default:
-            return 0;
+            return 50;
         }
     }
     bool operator == (const xctmp_token_t & op) const {
@@ -86,41 +94,39 @@ struct xctmp_token_t {
 };
 
 //need g++4.9+
-//static const std::regex   digit_re("^\\d");
+static const std::regex   digit_re("^[+-]?[0-9]+(\\.[0-9]+)?");
 static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
 static const std::regex   str_re_1("^\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
 static const std::regex   str_re_2("^'(([^\\']\\')|[^'])*'"); //"(([^\"]\")|[^"])*"
 static const std::regex	  ctl_re("^![a-zA-Z]+");
+
 static int 
 _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
     xctmp_token_t tok;
-    char * pend;
     //----------------------------------------
     const char * pcs = text.c_str();
-    std::smatch m;
-    while (true && *pcs){
+	char * pdend;
+	std::smatch m;
+    while (*pcs){
         tok.text.clear();
-        tok.digit = strtof(pcs, &pend);
-		if (*pcs != '+' && pend != pcs){ //digit
-            tok.type = xctmp_token_t::TOKEN_NUM;
-            tok.text.assign(pcs, pend - pcs);
-            pcs = pend;
-            toklist.push_back(tok);
-            continue;
-        }
+		tok.digit = strtold(pcs, &pdend);
+		if (*pcs == '+' || *pcs == '-' || pdend != pcs){
+			if (!toklist.empty() && !toklist.back().is_op()){
+				tok.type = (*pcs == '+') ? xctmp_token_t::TOKEN_PLUS : xctmp_token_t::TOKEN_MINUS;
+				tok.text.assign(1, *pcs);
+				++pcs; //shift one char
+			}
+			else {
+				tok.type = xctmp_token_t::TOKEN_NUM;
+				tok.text.assign(pcs, pdend - pcs);
+				pcs = pdend;
+			}
+			toklist.push_back(tok);
+			continue;
+		}
 		tok.type = xctmp_token_t::TOKEN_NIL;
-        ////////////////////////////////////////
+		////////////////////////////////////////
         switch (*pcs){
-        case '+':
-            tok.type = xctmp_token_t::TOKEN_PLUS;
-            tok.text.assign(1, *pcs);
-            ++pcs; //shift one char
-            break;
-        case '-':
-            tok.type = xctmp_token_t::TOKEN_MINUS;
-            tok.text.assign(1, *pcs);
-            ++pcs; //shift one char
-            break;
         case '*':
             tok.type = xctmp_token_t::TOKEN_PRODUCT;
             tok.text.assign(1, *pcs);
@@ -164,7 +170,7 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
                 pcs += m.length();
             }
             else {
-                std::cerr << "ilegal literal :" << pcs << std::endl;
+                std::cerr << "ilegal string \" style literal :" << pcs << std::endl;
                 return -1;
             }
             break;
@@ -175,7 +181,7 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
                 pcs += m.length();
             }
             else {
-                std::cerr << "ilegal literal :" << pcs << std::endl;
+                std::cerr << "ilegal string ' style literal :" << pcs << std::endl;
                 return -1;
             }
             break;
@@ -314,49 +320,22 @@ xctmp_parse(const std::string & text){
 }
 
 static inline xctmp_token_t
-_eval_expr_reduce(std::stack<const xctmp_token_t*> &opv,
-    std::stack<const xctmp_token_t*> & opt, const xctmp_token_t & tok);
-
-static inline xctmp_token_t
 _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_token_t*> & opt){
     xctmp_token_t result;
     result.type = xctmp_token_t::TOKEN_ERROR;
-
-    if (opv.size() < 2){
-		if (opv.empty() || !opt.empty() && opt.top()->type != xctmp_token_t::TOKEN_BRACKET_RIGHT){
-			result.text = "ilegal expression !";
-			return result;
-		}
-		else {
-			result = *opv.top();
-			opv.pop();
-			return result;
-		}
-    }
+	if (opv.empty()){
+		result.value = "ilegal expression !";
+		return result;
+	}
     auto op = opt.top();
     opt.pop();
-
-    if (op->type == xctmp_token_t::TOKEN_BRACKET_RIGHT){
-        result = _eval_expr_reduce(opv, opt, *op);
-        if (result.type == xctmp_token_t::TOKEN_ERROR){
-            return result;
-        }
-        else if (opt.empty() || opt.top()->type != xctmp_token_t::TOKEN_BRACKET_RIGHT){
-            result.type = xctmp_token_t::TOKEN_ERROR;
-            result.text = "bracket pair not matched !";
-            return result;
-        }
-        assert(opt.top()->type == xctmp_token_t::TOKEN_BRACKET_RIGHT);
-        opt.pop();
-        return result;
-    }
-    //binary operator
+    //binary operator all so far
     auto right = opv.top();
     opv.pop();
     auto left = opv.top();
     opv.pop();
 
-	std::clog << "evalue bin:" << left->value << op->text << right->value << std::endl;
+	std::clog << "evalue binary op :" << left->value << op->text << right->value << "left opv,opt:" << opv.size() <<","<< opt.size() << std::endl;
 
     switch (op->type){
     case xctmp_token_t::TOKEN_EQ:
@@ -391,13 +370,13 @@ _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_t
             result.digit = left->digit / right->digit;
             return result;
         }
-        result.text = "right op value :" + right->text + " value is 0 !";
+		result.value = "right op value :" + right->text + " value is 0 !";
         return result;
 
     case xctmp_token_t::TOKEN_FILTER:
         if (left->type != xctmp_token_t::TOKEN_STRING ||
             right->type != xctmp_token_t::TOKEN_FUNC){
-            result.text = "filter evaluate param type error !";
+            result.value = "filter evaluate param type error !";
             return result;
         }
         xctmp_func_t pf;
@@ -405,34 +384,63 @@ _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_t
         result.value = pf(left->value);
         return result;
     default:
-        result.text = "unknown op :" + op->text;
+		result.value = "unknown op :" + op->text;
         return result;
     }
 }
-
 static inline xctmp_token_t
 _eval_expr_reduce(std::stack<const xctmp_token_t*> &opv,
-                    std::stack<const xctmp_token_t*> & opt, const xctmp_token_t & tok){
-    using std::vector;
-    vector<xctmp_token_t>   _store;
-    xctmp_token_t result;
-    result.type = xctmp_token_t::TOKEN_ERROR;
-    while (!opt.empty()){
-        auto lop = opt.top();
-        if (tok.priority() <= lop->priority()){ //low priority , calculate last
-            auto rtk = _eval_expr_step(opv, opt);
-            if (rtk.type == xctmp_token_t::TOKEN_ERROR){
-                result.text = "evalue step error :" + rtk.value;
-                return result;
-            }
-            _store.push_back(rtk);
-            opv.push(&_store.back());
-        }
-    }
-    result = *opv.top();
-    opv.pop();
-    return result;
+		std::stack<const xctmp_token_t*> & opt,
+		const xctmp_token_t & tok,
+		std::vector<xctmp_token_t> & _store_token){
+	xctmp_token_t error_value;
+	error_value.type = xctmp_token_t::TOKEN_ERROR;
+	while (!opt.empty()){
+		//================================
+		auto lop = opt.top();
+		if (tok.type == xctmp_token_t::TOKEN_BRACKET_RIGHT){
+			if (opt.empty()){
+				error_value.value = "bracket not match ! expect ( ";
+				return error_value;
+			}
+			lop = opt.top();
+			while (!opt.empty() && lop->type != xctmp_token_t::TOKEN_BRACKET_LEFT){
+				auto rtk = _eval_expr_step(opv, opt);
+				if (rtk.type == xctmp_token_t::TOKEN_ERROR){
+					error_value.value = "evalue step error :" + rtk.value;
+					return error_value;
+				}
+				_store_token.push_back(rtk);
+				opv.push(&_store_token.back());
+				lop = opt.top();
+			}
+			if (opt.empty() || lop->type != xctmp_token_t::TOKEN_BRACKET_LEFT){
+				error_value.value = "bracket not match ! expect ( ";
+				return error_value;
+			}
+			opt.pop();
+			break;
+		}
+		else if (tok.priority() <= lop->priority()){ //low priority , calculate last
+			auto rtk = _eval_expr_step(opv, opt);
+			if (rtk.type == xctmp_token_t::TOKEN_ERROR){
+				error_value.value = "evalue step error :" + rtk.value;
+				return error_value;
+			}
+			_store_token.push_back(rtk);
+			opv.push(&_store_token.back());
+		}
+		else {
+			break;
+		}
+	}
+	if (opt.empty() && opv.size() > 1){
+		error_value.value = "expect a operator !";
+		return error_value;
+	}
+	return *opv.top();
 }
+
 
 static inline xctmp_token_t
 _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
@@ -453,18 +461,16 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
     //else
     //eval  lop
     //push  cop
-	std::clog << "evalue :" << chk.text << std::endl;
-
-    xctmp_token_t     value;
-    value.type = xctmp_token_t::TOKEN_ERROR;
+    xctmp_token_t     result_value;
+    result_value.type = xctmp_token_t::TOKEN_ERROR;
 
     std::stack<const xctmp_token_t*>     opv;
     std::stack<const xctmp_token_t*>     opt;
     std::vector<xctmp_token_t>           _store_token;
     auto tokenlist = chk.toklist;
     auto it = tokenlist.begin();
-    while(it != tokenlist.end()){
-        auto & tok = *(it++);
+    while(it != tokenlist.end()){	
+		auto & tok = *(it++);
         if (tok.type == xctmp_token_t::TOKEN_NUM ||
             tok.type == xctmp_token_t::TOKEN_STRING){
             tok.value = tok.text;
@@ -474,41 +480,28 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
             tok.value = env.path(tok.text).str();
             opv.push(&tok);
         }
-        else {
-            if (opt.empty()){
+        else { //operator
+            if (opt.empty() || tok.type == xctmp_token_t::TOKEN_BRACKET_LEFT){
                 opt.push(&tok);
             }
-            else {
-                auto lop = opt.top();
-                if (tok.priority() <= lop->priority()){ //low priority , calculate last
-                    auto rtk = _eval_expr_reduce(opv, opt, tok);
-                    if (rtk.type == xctmp_token_t::TOKEN_ERROR){
-                        value.text = "evalue step error :" + rtk.value;
-                        return value;
-                    }
-                    _store_token.push_back(rtk);
-                    opv.push(&_store_token.back());
+			else if (tok.type == xctmp_token_t::TOKEN_BRACKET_RIGHT ||
+					 tok.priority() <= opt.top()->priority()){
+                auto rtk = _eval_expr_reduce(opv, opt, tok, _store_token);
+                if (rtk.type == xctmp_token_t::TOKEN_ERROR){
+                    result_value.value = "evalue step error :" + rtk.value;
+                    return result_value;
                 }
-                else {
-                    opt.push(&tok);
-                }//end if push token that is operator
-            }//end if push token
-        }// end while
-    }
-	value = _eval_expr_step(opv, opt);
-	//--debug--
-	while(!opv.empty()){
-		std::clog << opv.top()->value << " ";
-		opv.pop();
-	}
-	std::clog << std::endl;
-	while (!opt.empty()){
-		std::clog << opt.top()->value << " ";
-		opt.pop();
-	}
-	std::clog << std::endl;
-
-    return value;
+            }
+            else {
+                opt.push(&tok); //high level op
+            }//end operator branch
+        }// end push op
+    }//end while
+	//====================================================================
+	xctmp_token_t _dummy_op;
+	_dummy_op.type = xctmp_token_t::TOKEN_EQ;
+	result_value = _eval_expr_reduce(opv, opt, _dummy_op, _store_token);
+    return result_value;
 }
 int       
 xctmp_render(xctmp_t * xc, std::string & output, xctmp_env_t & env){
@@ -528,7 +521,7 @@ xctmp_render(xctmp_t * xc, std::string & output, xctmp_env_t & env){
 				output.append(std::to_string(result.digit));
 			}
 			else if (result.type == xctmp_token_t::TOKEN_ERROR){
-				std::cerr << "render error :" << result.value << " expression:"<< it->text << std::endl;
+				std::cerr << "render error :" << result.value << " expression error :"<< it->text << std::endl;
 				return -1;
 			}
 			break;

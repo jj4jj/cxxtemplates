@@ -34,6 +34,9 @@ struct xctmp_env_t {
         }
         dict.clear();
     }
+	bool null() const {
+		return this == &empty;
+	}
     ////////////////////////////////////////////////////////////////
     xctmp_env_t(){
         type = VALUE_ENV;

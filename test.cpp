@@ -6,7 +6,7 @@
 using namespace std;
 
 string lowercase(const std::string & v){
-    return "";
+    return "lowercase|" + v;
 }
 
 int main(){
@@ -22,13 +22,13 @@ int main(){
 			cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
 		}
 
-		static const std::regex   str_re("\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
+		static const std::regex   str_re("\"((([^\\\"]\\\")|[^\"])*)\""); //"(([^\"]\")|[^"])*"
 		string s2 = "\"hello.\\\"w_orld.yes3\\\" + x + y + z\" a b c";
 		m;
 		ret = std::regex_search(s2, m, str_re);
-		cout << "ret:" << ret << endl;
+		cout << "ret:------------" << ret << endl;
 		if (ret){
-			cout << "pos:" << m.position() << " length:" << m.length() << " matched :" << m.str(0) << endl;
+			cout << "pos:" << m.position() << " length:" << m.length(1) << " matched :" << m.str(1) << endl;
 		}
 	
 	}
@@ -56,11 +56,12 @@ int main(){
     xctmp_env_t env;
     env["file"] = "hello.hpb.h";
     env["struct"] = "HelloST";
+	env["lowercase"] = lowercase;
     xctmp_env_t field;
     field["type"] = "int32_t";
     field["array"] = 1;
     field["count"] = 24;
-    field["name"] = 24;
+    field["name"] = "AbC";
 
     env["field"] = field;
     if (!xc){

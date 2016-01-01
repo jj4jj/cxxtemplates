@@ -32,21 +32,31 @@ static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n")
     }
     return  count;
 }
+static inline  void
+_strreplace(std::string & ts, const std::string & p, const std::string & v){
+	auto beg = 0;
+	auto fnd = ts.find(p, beg);
+	while (fnd != std::string::npos){
+		ts.replace(fnd, p.length(), v);
+		beg = fnd + v.length();
+		fnd = ts.find(p, beg);
+	}
+}
+
 struct xctmp_token_t {
     std::string text; //static from tempalte buffer
     std::string value;//dynamic value binding
-    long double digit; //dyn
+    long long	digit; //dyn
 	xctmp_func_t  fptr; //dyn
     enum xctmp_token_type {
         TOKEN_ERROR = -1,
         //empty
         TOKEN_NIL = 0,
         //id, num
-        TOKEN_ID,
-        TOKEN_NUM,
-        TOKEN_STRING,
-        TOKEN_FUNC,
-
+		TOKEN_ID,
+		TOKEN_NUM,
+		TOKEN_STRING,
+		TOKEN_FUNC,
 		//flow contrl 
 		TOKEN_CTRL,
 
@@ -94,10 +104,10 @@ struct xctmp_token_t {
 };
 
 //need g++4.9+
-static const std::regex   digit_re("^[+-]?[0-9]+(\\.[0-9]+)?");
+//static const std::regex   digit_re("^[+-]?[1-9]+");
 static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
-static const std::regex   str_re_1("^\"(([^\\\"]\\\")|[^\"])*\""); //"(([^\"]\")|[^"])*"
-static const std::regex   str_re_2("^'(([^\\']\\')|[^'])*'"); //"(([^\"]\")|[^"])*"
+static const std::regex   str_re_1("^\"((([^\\\"]\\\")|[^\"])*)\""); //"(([^\"]\")|[^"])*"
+static const std::regex   str_re_2("^'((([^\\']\\')|[^'])*)'"); //"(([^\"]\")|[^"])*"
 static const std::regex	  ctl_re("^![a-zA-Z]+");
 
 static int 
@@ -109,7 +119,7 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
 	std::smatch m;
     while (*pcs){
         tok.text.clear();
-		tok.digit = strtold(pcs, &pdend);
+		tok.digit = strtoll(pcs, &pdend, 10);
 		if (*pcs == '+' || *pcs == '-' || pdend != pcs){
 			if (!toklist.empty() && !toklist.back().is_op()){
 				tok.type = (*pcs == '+') ? xctmp_token_t::TOKEN_PLUS : xctmp_token_t::TOKEN_MINUS;
@@ -166,9 +176,10 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
         case '"':
             if (std::regex_search(std::string(pcs), m, str_re_1)){
                 tok.type = xctmp_token_t::TOKEN_STRING;
-                tok.text = m.str();
+                tok.text = m.str(1);
                 pcs += m.length();
-            }
+				_strreplace(tok.text, "\\\"", "\"");
+			}
             else {
                 std::cerr << "ilegal string \" style literal :" << pcs << std::endl;
                 return -1;
@@ -177,9 +188,10 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
         case '\'':
             if (std::regex_search(std::string(pcs), m, str_re_2)){
                 tok.type = xctmp_token_t::TOKEN_STRING;
-                tok.text = m.str();
+                tok.text = m.str(1);
                 pcs += m.length();
-            }
+				_strreplace(tok.text, "\\'", "'");
+			}
             else {
                 std::cerr << "ilegal string ' style literal :" << pcs << std::endl;
                 return -1;
@@ -335,8 +347,6 @@ _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_t
     auto left = opv.top();
     opv.pop();
 
-	std::clog << "evalue binary op :" << left->value << op->text << right->value << "left opv,opt:" << opv.size() <<","<< opt.size() << std::endl;
-
     switch (op->type){
     case xctmp_token_t::TOKEN_EQ:
         result.type = xctmp_token_t::TOKEN_NUM;
@@ -379,9 +389,8 @@ _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_t
             result.value = "filter evaluate param type error !";
             return result;
         }
-        xctmp_func_t pf;
-        sscanf(right->value.c_str(), "%p", &pf);
-        result.value = pf(left->value);
+		result.type = xctmp_token_t::TOKEN_STRING;
+        result.value = right->fptr(left->value);
         return result;
     default:
 		result.value = "unknown op :" + op->text;
@@ -477,7 +486,31 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
             opv.push(&tok);
         }
         else if (tok.type == xctmp_token_t::TOKEN_ID){
-            tok.value = env.path(tok.text).str();
+			auto & val = env.path(tok.text);
+			if (val.null()){
+				std::cerr << "eval varialbe:" << tok.text << " not found in env !" << std::endl;
+			}
+			else { 
+				switch (val.type){
+				case xctmp_env_t::VALUE_INT:
+					tok.type = xctmp_token_t::TOKEN_NUM;
+					tok.digit = val.uv_.i64;
+					break;
+				case xctmp_env_t::VALUE_STR:
+					tok.type = xctmp_token_t::TOKEN_STRING;
+					tok.value = val.str_;
+					break;
+				case xctmp_env_t::VALUE_FUNC:
+					tok.type = xctmp_token_t::TOKEN_FUNC;
+					tok.fptr = val.func_;
+					break;
+				default:
+					std::cerr << "warning: eval viralbe:" << tok.text << " not a basic value type !" << std::endl;
+					tok.type = xctmp_token_t::TOKEN_STRING;
+					tok.value = val.str();
+					break;
+				}
+			}
             opv.push(&tok);
         }
         else { //operator

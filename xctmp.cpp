@@ -1,114 +1,26 @@
 #include "xctmp.h"
+#include "xctmp_env.hpp"
+#include "xctmp_utils.hpp"
+#include <string>
+#include <unordered_map>
+#include <cassert>
+#include <functional>
+#include <inttypes.h>
 #include <list>
 #include <stack>
 #include <iostream>
 #include <regex>
-xctmp_env_t	xctmp_env_t::empty;
-
-static inline int _strtrim(std::string & str, const char * trimchar = " \t\r\n"){
-    auto begmatch = str.begin();
-    int count = 0;
-    while (begmatch != str.end()){
-        if (strchr(trimchar, *begmatch)){
-            ++begmatch;
-            ++count;
-        }
-        break;
-    }
-    if (str.begin() < begmatch){
-        str.erase(str.begin(), begmatch);
-    }
-    //
-    auto rbegmatch = str.end();
-    while (rbegmatch != str.begin()){
-        if (strchr(trimchar, *rbegmatch)){
-            --rbegmatch;
-            ++count;
-        }
-        break;
-    }
-    if (rbegmatch != str.end()){
-        str.erase(rbegmatch + 1, str.end());
-    }
-    return  count;
-}
-static inline  void
-_strreplace(std::string & ts, const std::string & p, const std::string & v){
-	auto beg = 0;
-	auto fnd = ts.find(p, beg);
-	while (fnd != std::string::npos){
-		ts.replace(fnd, p.length(), v);
-		beg = fnd + v.length();
-		fnd = ts.find(p, beg);
-	}
-}
-
-struct xctmp_token_t {
-    std::string text; //static from tempalte buffer
-    std::string value;//dynamic value binding
-    long long	digit; //dyn
-	xctmp_func_t  fptr; //dyn
-    enum xctmp_token_type {
-        TOKEN_ERROR = -1,
-        //empty
-        TOKEN_NIL = 0,
-        //id, num
-		TOKEN_ID,
-		TOKEN_NUM,
-		TOKEN_STRING,
-		TOKEN_FUNC,
-		//flow contrl 
-		TOKEN_CTRL,
-
-        //+-*/|() -----operator--------
-        TOKEN_EQ ,
-        TOKEN_PLUS ,
-        TOKEN_MINUS ,
-        TOKEN_PRODUCT,
-        TOKEN_DIV ,
-        TOKEN_FILTER ,
-        ///////////////////
-        TOKEN_BRACKET_LEFT ,
-        TOKEN_BRACKET_RIGHT,
-    } type;
-	bool is_op(){
-		return priority() >= 100 && priority() <= 200;
-	}
-    int priority() const {
-		//common	50
-		//op 100 - 200	()
-		//
-        switch (type){
-        case TOKEN_EQ:
-            return 110;
-        case TOKEN_PLUS:
-        case TOKEN_MINUS:
-            return 150;
-        case TOKEN_PRODUCT:
-        case TOKEN_DIV:
-            return 160;
-        case TOKEN_FILTER:
-            return 180;
-                ///////////////////
-        case TOKEN_BRACKET_LEFT:
-			return 100;
-        case TOKEN_BRACKET_RIGHT:
-            return 200;
-        default:
-            return 50;
-        }
-    }
-    bool operator == (const xctmp_token_t & op) const {
-        return type == op.type && value == op.value;
-    }
-};
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 
 //need g++4.9+
 //static const std::regex   digit_re("^[+-]?[1-9]+");
 static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
 static const std::regex   str_re_1("^\"((([^\\\"]\\\")|[^\"])*)\""); //"(([^\"]\")|[^"])*"
 static const std::regex   str_re_2("^'((([^\\']\\')|[^'])*)'"); //"(([^\"]\")|[^"])*"
-static const std::regex	  ctl_re("^![a-zA-Z]+");
+static const std::regex	  ctl_re("^!([a-zA-Z]+)");
+static const std::regex	  func_re("^@([a-zA-Z]+)");
 
 static int 
 _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
@@ -148,7 +60,7 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
             ++pcs; //shift one char
             break;
         case '|':
-            tok.type = xctmp_token_t::TOKEN_FILTER;
+            tok.type = xctmp_token_t::TOKEN_FILT;
             tok.text.assign(1, *pcs);
             ++pcs; //shift one char
             break;
@@ -199,12 +111,23 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
             break;
 		case '!':
 			if (std::regex_search(std::string(pcs), m, ctl_re)){
-				tok.type = xctmp_token_t::TOKEN_STRING;
-				tok.text = m.str();
+				tok.type = xctmp_token_t::TOKEN_CTRLER;
+				tok.text = m.str(1);
 				pcs += m.length();
 			}
 			else {
 				std::cerr << "ilegal ctrl literal :" << pcs << std::endl;
+				return -1;
+			}
+			break;
+		case '@':
+			if (std::regex_search(std::string(pcs), m, func_re)){
+				tok.type = xctmp_token_t::TOKEN_FILTER;
+				tok.text = m.str(1);
+				pcs += m.length();
+			}
+			else {
+				std::cerr << "ilegal func literal :" << pcs << std::endl;
 				return -1;
 			}
 			break;
@@ -228,50 +151,6 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
     return 0;
 }
 
-
-struct xctmp_chunk_t {
-    std::string text;
-    enum xctmp_chunk_type {
-        CHUNK_UNKNOWN,
-        CHUNK_TEXT,
-        CHUNK_EXPR,
-		CHUNK_BLOCK_CTL,
-        CHUNK_BLOCK_END,
-        CHUNK_COMMENT,
-    } type;
-    std::list<xctmp_token_t>    toklist;
-
-    xctmp_chunk_t(){
-        type = CHUNK_UNKNOWN;
-    }
-    xctmp_chunk_t(const std::string & t){
-        text = t;
-        type = CHUNK_TEXT;
-    }
-    int     parse(){
-        if (type == CHUNK_TEXT){
-            return 0;
-        }
-        _strtrim(text);
-        if (text.empty()){
-            type = CHUNK_BLOCK_END;
-        }
-        else if (text.find("#") == 0){
-            type = CHUNK_COMMENT;
-            text.erase(0);
-        }
-		else if (text.find("!") == 0){
-			type = CHUNK_BLOCK_CTL;
-			return _expr_parse(toklist, text);
-		}
-        else {
-            type = CHUNK_EXPR;
-            ////////////////////////////////////
-            return _expr_parse(toklist, text);
-        }
-        return 0;
-    }
-};
 struct xctmp_t {
 	std::string					text;
 	std::list<xctmp_chunk_t>	chunk_list;
@@ -330,9 +209,50 @@ xctmp_parse(const std::string & text){
     xc->chunk_list = chklist;
 	return xc;
 }
+static inline void 
+_eval_token(xctmp_token_t & tok, const xctmp_env_t & env){
+	if (tok.type != xctmp_token_t::TOKEN_ID){
+		return;
+	}
+	std::string juri = tok.text;
+	_strreplace(juri, ".", "/");
+	auto v = rapidjson::Pointer(juri.c_str()).Get(env);
+	if (v){
+		if (v->IsString()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.value = v->GetString();
+		}
+		else if (v->IsInt64()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.digit = v->GetInt64();
+		}
+		else if (v->IsDouble()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.digit = v->GetDouble();
+		}
+		else if (v->IsBool()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.digit = v->GetBool();
+		}
+		else if (v->IsInt()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.digit = v->GetInt();
+		}
+		else if (v->IsUint()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.digit = v->GetUint();
+		}
+		else if (v->IsUint64()){
+			tok.type = xctmp_token_t::TOKEN_NUM;
+			tok.digit = v->GetUint64();
+		}
+	}
+}
 
 static inline xctmp_token_t
-_eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_token_t*> & opt){
+_eval_expr_step(std::stack<xctmp_token_t*> & opv,
+		std::stack<xctmp_token_t*> & opt,
+		const xctmp_env_t & env){
     xctmp_token_t result;
     result.type = xctmp_token_t::TOKEN_ERROR;
 	if (opv.empty()){
@@ -347,35 +267,85 @@ _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_t
     auto left = opv.top();
     opv.pop();
 
+	_eval_token(*left, env);
+	_eval_token(*right, env);
+
     switch (op->type){
     case xctmp_token_t::TOKEN_EQ:
         result.type = xctmp_token_t::TOKEN_NUM;
-        result.digit = *left == *right ? 1.0 : 0;
+        result.digit = *left == *right ? 1 : 0;
         return result;
 
     case xctmp_token_t::TOKEN_PLUS:
-        if (left->type == xctmp_token_t::TOKEN_STRING){
-            result.type = xctmp_token_t::TOKEN_STRING;
-            result.value = left->value + right->value;
-            return result;
+		if (left->type == xctmp_token_t::TOKEN_NUM &&
+			right->type == xctmp_token_t::TOKEN_NUM){
+			result.type = xctmp_token_t::TOKEN_NUM;
+			result.digit = left->digit + right->digit;
+			return result;
+		}
+		if (left->type == xctmp_token_t::TOKEN_NUM){
+			result.value += std::to_string(left->digit);
         }
-        result.type = xctmp_token_t::TOKEN_NUM;
-        result.digit = left->digit + right->digit;
+		else {
+			result.value += left->value;
+		}
+		if (right->type == xctmp_token_t::TOKEN_NUM){
+			result.value += std::to_string(right->digit);
+		}
+		else {
+			result.value += right->value;
+		}
+		result.type = xctmp_token_t::TOKEN_STRING;
         return result;
 
     case xctmp_token_t::TOKEN_MINUS:
         //must be num
+		if (left->type != xctmp_token_t::TOKEN_NUM ||
+			right->type != xctmp_token_t::TOKEN_NUM){
+			result.value = "minus opetaor param type error !";
+			return result;
+		}
         result.type = xctmp_token_t::TOKEN_NUM;
         result.digit = left->digit - right->digit;
         return result;
 
     case xctmp_token_t::TOKEN_PRODUCT:
-        result.type = xctmp_token_t::TOKEN_NUM;
-        result.digit = left->digit * right->digit;
+		if (left->type == xctmp_token_t::TOKEN_NUM &&
+			right->type == xctmp_token_t::TOKEN_NUM){
+			result.type = xctmp_token_t::TOKEN_NUM;
+			result.digit = left->digit * right->digit;
+			return result;
+		}
+		if (left->type == xctmp_token_t::TOKEN_STRING &&
+			right->type == xctmp_token_t::TOKEN_NUM){
+			int n = right->digit;
+			result.type = xctmp_token_t::TOKEN_STRING;
+			result.value = "";
+			while (n-- > 0){
+				result.value += left->value;
+			}
+			return result;
+		}
+		if (right->type == xctmp_token_t::TOKEN_STRING &&
+			left->type == xctmp_token_t::TOKEN_NUM){
+			int n = left->digit;
+			result.type = xctmp_token_t::TOKEN_STRING;
+			result.value = "";
+			while (n-- > 0){
+				result.value += right->value;
+			}
+			return result;
+		}
+        result.value = "product operator param error !";
         return result;
 
     case xctmp_token_t::TOKEN_DIV:
-        result.type = xctmp_token_t::TOKEN_NUM;
+		if (left->type != xctmp_token_t::TOKEN_NUM ||
+			right->type != xctmp_token_t::TOKEN_NUM){
+			result.value = "div opetaor param type error !";
+			return result;
+		}
+		result.type = xctmp_token_t::TOKEN_NUM;
         if (right->digit > 0){
             result.digit = left->digit / right->digit;
             return result;
@@ -383,25 +353,35 @@ _eval_expr_step(std::stack<const xctmp_token_t*> & opv, std::stack<const xctmp_t
 		result.value = "right op value :" + right->text + " value is 0 !";
         return result;
 
-    case xctmp_token_t::TOKEN_FILTER:
+    case xctmp_token_t::TOKEN_FILT:
         if (left->type != xctmp_token_t::TOKEN_STRING ||
-            right->type != xctmp_token_t::TOKEN_FUNC){
+            right->type != xctmp_token_t::TOKEN_FILTER){
             result.value = "filter evaluate param type error !";
             return result;
         }
-		result.type = xctmp_token_t::TOKEN_STRING;
-        result.value = right->fptr(left->value);
-        return result;
+		else {
+			xctmp_filter_t fpfilter;
+			auto v = rapidjson::Pointer(right->value.c_str()).Get(env);
+			if (!v){
+				result.value = "filter right param not found in env!";
+				return result;
+			}
+			sscanf(v->GetString(), "%p", &fpfilter);
+			result.type = xctmp_token_t::TOKEN_STRING;
+			result.value = fpfilter(left->value);
+			return result;
+		}
     default:
-		result.value = "unknown op :" + op->text;
+		result.value = "unknown operator :" + op->text;
         return result;
     }
 }
 static inline xctmp_token_t
-_eval_expr_reduce(std::stack<const xctmp_token_t*> &opv,
-		std::stack<const xctmp_token_t*> & opt,
+_eval_expr_reduce(std::stack<xctmp_token_t*> &opv,
+		std::stack<xctmp_token_t*> & opt,
 		const xctmp_token_t & tok,
-		std::vector<xctmp_token_t> & _store_token){
+		std::vector<xctmp_token_t> & _store_token,
+		const xctmp_env_t & env){
 	xctmp_token_t error_value;
 	error_value.type = xctmp_token_t::TOKEN_ERROR;
 	while (!opt.empty()){
@@ -414,7 +394,7 @@ _eval_expr_reduce(std::stack<const xctmp_token_t*> &opv,
 			}
 			lop = opt.top();
 			while (!opt.empty() && lop->type != xctmp_token_t::TOKEN_BRACKET_LEFT){
-				auto rtk = _eval_expr_step(opv, opt);
+				auto rtk = _eval_expr_step(opv, opt, env);
 				if (rtk.type == xctmp_token_t::TOKEN_ERROR){
 					error_value.value = "evalue step error :" + rtk.value;
 					return error_value;
@@ -431,7 +411,7 @@ _eval_expr_reduce(std::stack<const xctmp_token_t*> &opv,
 			break;
 		}
 		else if (tok.priority() <= lop->priority()){ //low priority , calculate last
-			auto rtk = _eval_expr_step(opv, opt);
+			auto rtk = _eval_expr_step(opv, opt, env);
 			if (rtk.type == xctmp_token_t::TOKEN_ERROR){
 				error_value.value = "evalue step error :" + rtk.value;
 				return error_value;
@@ -473,44 +453,16 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
     xctmp_token_t     result_value;
     result_value.type = xctmp_token_t::TOKEN_ERROR;
 
-    std::stack<const xctmp_token_t*>     opv;
-    std::stack<const xctmp_token_t*>     opt;
+    std::stack<xctmp_token_t*>     opv;
+    std::stack<xctmp_token_t*>     opt;
     std::vector<xctmp_token_t>           _store_token;
     auto tokenlist = chk.toklist;
     auto it = tokenlist.begin();
     while(it != tokenlist.end()){	
 		auto & tok = *(it++);
         if (tok.type == xctmp_token_t::TOKEN_NUM ||
-            tok.type == xctmp_token_t::TOKEN_STRING){
-            tok.value = tok.text;
-            opv.push(&tok);
-        }
-        else if (tok.type == xctmp_token_t::TOKEN_ID){
-			auto & val = env.path(tok.text);
-			if (val.null()){
-				std::cerr << "eval varialbe:" << tok.text << " not found in env !" << std::endl;
-			}
-			else { 
-				switch (val.type){
-				case xctmp_env_t::VALUE_INT:
-					tok.type = xctmp_token_t::TOKEN_NUM;
-					tok.digit = val.uv_.i64;
-					break;
-				case xctmp_env_t::VALUE_STR:
-					tok.type = xctmp_token_t::TOKEN_STRING;
-					tok.value = val.str_;
-					break;
-				case xctmp_env_t::VALUE_FUNC:
-					tok.type = xctmp_token_t::TOKEN_FUNC;
-					tok.fptr = val.func_;
-					break;
-				default:
-					std::cerr << "warning: eval viralbe:" << tok.text << " not a basic value type !" << std::endl;
-					tok.type = xctmp_token_t::TOKEN_STRING;
-					tok.value = val.str();
-					break;
-				}
-			}
+            tok.type == xctmp_token_t::TOKEN_STRING ||
+			tok.type == xctmp_token_t::TOKEN_ID ){
             opv.push(&tok);
         }
         else { //operator
@@ -519,9 +471,9 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
             }
 			else if (tok.type == xctmp_token_t::TOKEN_BRACKET_RIGHT ||
 					 tok.priority() <= opt.top()->priority()){
-                auto rtk = _eval_expr_reduce(opv, opt, tok, _store_token);
+                auto rtk = _eval_expr_reduce(opv, opt, tok, _store_token, env);
                 if (rtk.type == xctmp_token_t::TOKEN_ERROR){
-                    result_value.value = "evalue step error :" + rtk.value;
+                    result_value.value = "evaluation step error :" + rtk.value;
                     return result_value;
                 }
             }
@@ -533,13 +485,19 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
 	//====================================================================
 	xctmp_token_t _dummy_op;
 	_dummy_op.type = xctmp_token_t::TOKEN_EQ;
-	result_value = _eval_expr_reduce(opv, opt, _dummy_op, _store_token);
+	result_value = _eval_expr_reduce(opv, opt, _dummy_op, _store_token, env);
     return result_value;
 }
 int       
-xctmp_render(xctmp_t * xc, std::string & output, xctmp_env_t & env){
+xctmp_render(xctmp_t * xc, std::string & output, const std::string & jsenv){
 	auto it = xc->chunk_list.begin();
     xctmp_token_t result;
+	xctmp_env_t env;
+	int ret = env.loads(jsenv.c_str());
+	if (ret){
+		std::cerr << "json load error !" << std::endl;
+		return ret;
+	}
     for (; it != xc->chunk_list.end(); ++it){
 		switch (it->type){
 		case xctmp_chunk_t::CHUNK_TEXT:
@@ -568,4 +526,70 @@ void
 xctmp_destroy(xctmp_t * xc){
 	delete xc;
 }
+
+//=====================================================================
+
+bool xctmp_token_t::is_op(){
+	return priority() >= 100 && priority() <= 200;
+}
+int xctmp_token_t::priority() const {
+	//common	50
+	//op 100 - 200	()
+	//
+	switch (type){
+	case TOKEN_EQ:
+		return 110;
+	case TOKEN_PLUS:
+	case TOKEN_MINUS:
+		return 150;
+	case TOKEN_PRODUCT:
+	case TOKEN_DIV:
+		return 160;
+	case TOKEN_FILT:
+		return 180;
+		///////////////////
+	case TOKEN_BRACKET_LEFT:
+		return 100;
+	case TOKEN_BRACKET_RIGHT:
+		return 200;
+	default:
+		return 50;
+	}
+}
+bool xctmp_token_t::operator == (const xctmp_token_t & op) const {
+	return type == op.type && value == op.value;
+}
+
+//========================================
+xctmp_chunk_t::xctmp_chunk_t(){
+	type = CHUNK_UNKNOWN;
+}
+xctmp_chunk_t::xctmp_chunk_t(const std::string & t){
+	text = t;
+	type = CHUNK_TEXT;
+}
+int     xctmp_chunk_t::parse(){
+	if (type == CHUNK_TEXT){
+		return 0;
+	}
+	_strtrim(text);
+	if (text.empty()){
+		type = CHUNK_BLOCK_END;
+	}
+	else if (text.find("#") == 0){
+		type = CHUNK_COMMENT;
+		text.erase(0);
+	}
+	else if (text.find("!") == 0){
+		type = CHUNK_BLOCK_CTL;
+		return _expr_parse(toklist, text);
+	}
+	else {
+		type = CHUNK_EXPR;
+		return _expr_parse(toklist, text);
+	}
+	return 0;
+}
+
+
 

@@ -214,7 +214,7 @@ _eval_token(xctmp_token_t & tok, const xctmp_env_t & env){
 	if (tok.type != xctmp_token_t::TOKEN_ID){
 		return;
 	}
-	std::string juri = tok.text;
+	std::string juri = "/" + tok.text;
 	_strreplace(juri, ".", "/");
 	auto v = rapidjson::Pointer(juri.c_str()).Get(env);
 	if (v){
@@ -384,6 +384,9 @@ _eval_expr_reduce(std::stack<xctmp_token_t*> &opv,
 		const xctmp_env_t & env){
 	xctmp_token_t error_value;
 	error_value.type = xctmp_token_t::TOKEN_ERROR;
+	if (opv.size() == 1){ //just one opvalue
+		_eval_token(*opv.top(), env);
+	}
 	while (!opt.empty()){
 		//================================
 		auto lop = opt.top();
@@ -430,26 +433,25 @@ _eval_expr_reduce(std::stack<xctmp_token_t*> &opv,
 	return *opv.top();
 }
 
-
+//e:    digit
+//      var
+//      e+e
+//      e-e
+//      e/e
+//      e*e
+//      (e)
+//      e | filter
+//filter:   var
+//var:      id
+//cop
+//if cop >= lop
+//push cop
+//else
+//eval  lop
+//push  cop
 static inline xctmp_token_t
 _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
     //std::clog << "parsing: "<< chk.text << std::endl;
-    //e:    digit
-    //      var
-    //      e+e
-    //      e-e
-    //      e/e
-    //      e*e
-    //      (e)
-    //      e | filter
-    //filter:   var
-    //var:      id
-    //cop
-    //if cop >= lop
-    //push cop
-    //else
-    //eval  lop
-    //push  cop
     xctmp_token_t     result_value;
     result_value.type = xctmp_token_t::TOKEN_ERROR;
 
@@ -514,6 +516,9 @@ xctmp_render(xctmp_t * xc, std::string & output, const std::string & jsenv){
 			else if (result.type == xctmp_token_t::TOKEN_ERROR){
 				std::cerr << "render error :" << result.value << " expression error :"<< it->text << std::endl;
 				return -1;
+			}
+			else {
+				std::cerr << "error eval:" << result.type << " value:" << result.value << std::endl;
 			}
 			break;
 		case xctmp_chunk_t::CHUNK_COMMENT:

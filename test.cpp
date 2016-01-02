@@ -30,7 +30,20 @@ int main(){
 
     string output;
 	xctmp_t * xc = xctmp_parse(
-		"{{text}}{{int}}{{float}}{{#comment}}{{var.var}}{{var.var+3}}{{!if var.var == 3}}hello,world!{{!else}}hahhaha, else {{}}{{!for a in var.a}}{{a}}{{}}");
+		"text:{{text}}\n\
+		int:{{int}}\n\
+		float:{{float}}\n\
+		comment:{{#comment}}\n\
+		var.var:{{var.var}}\n\
+		var.var+3:{{var.var+3}}\n\
+		{{!if var.var == 3}}\n\
+			hello,world!\
+		{{!else}}\n\
+			hahhaha, else \n\
+		{{}}\n\
+		{{!for a in var.a}}\n\
+			{{a}}\n\
+		{{}}");
     if (!xc){
         return -1;
     }

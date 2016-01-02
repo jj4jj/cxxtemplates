@@ -18,6 +18,7 @@ class json_doc_t : public rapidjson::Document {
 	char *							parse_file_buffer;
 public:
 	json_doc_t(){
+		parse_file_buffer = nullptr;
 		SetObject();//root default is a object
 	}
 	~json_doc_t(){
@@ -67,23 +68,4 @@ public:
 		str = sb.GetString();
 		return str.c_str();
 	}
-
-	//get("/tmp/1")
-	template <typename CharType, size_t N>
-	typename rapidjson::Document::ValueType * get(const CharType(&source)[N]) {
-		return rapidjson::GenericPointer<typename rapidjson::Document::ValueType>(source, N - 1).Get(*this);
-	}
-
-	//get("/tmp/1","v")
-	template <typename CharType, size_t N, typename T2>
-	typename rapidjson::Document::ValueType * get(const CharType(&source)[N], T2 defaultValue) {
-		return &(rapidjson::GenericPointer<typename rapidjson::Document::ValueType>(source, N - 1).GetWithDefault(*this, defaultValue, GetAllocator()));
-	}
-
-	//set("/tmp/1","v")
-	template <typename CharType, size_t N, typename T2>
-	typename rapidjson::Document::ValueType& set(const CharType(&source)[N], T2 value) {
-		return rapidjson::GenericPointer<typename rapidjson::Document::ValueType>(source, N - 1).Set(*this, value);
-	}
-
 };

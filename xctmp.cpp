@@ -368,7 +368,7 @@ _eval_expr_step(std::stack<xctmp_token_t*> & opv,
     switch (op->type){
     case xctmp_token_t::TOKEN_EQ:
         result.type = xctmp_token_t::TOKEN_NUM;
-        result.digit = lv == rv ? 1 : 0;
+        result.digit = (lv == rv) ? 1 : 0;
         return result;
 
     case xctmp_token_t::TOKEN_PLUS:
@@ -592,7 +592,6 @@ _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t
 	++tokit;
 	if (tag.text == "if" || tag.text == "elif"){	//if expr
 		auto tok = _eval_expr(*chunkit, env);//evaluation
-		std::clog << "eval token:" << chunkit->text << " ret:" << tok.digit << std::endl;
 		if (tok.type != xctmp_token_t::TOKEN_NUM){
 			std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
 			return -1;
@@ -633,7 +632,6 @@ _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t
 			++chunkit;
 			while (chunkit != xc->chunk_list.end()){
 				if (chunkit->type == xctmp_chunk_t::CHUNK_BLOCK_END){
-					std::clog << "until next block end token" << chunkit->text << std::endl;
 					--chunkit;
 					return 0;
 				}
@@ -705,8 +703,6 @@ _render_end_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t &
 		return -1;
 	}
 	else {
-		std::clog << "matched a end block " << chunkit->text << std::endl;
-
 		auto & chk = env.chunks.back().itr; //current block
 		auto & tag = *chk->toklist.begin();
 		if (tag.text == "for"){ //for <v> in <v>(array)
@@ -830,7 +826,15 @@ int xctmp_token_t::priority() const {
 	}
 }
 bool xctmp_token_t::operator == (const xctmp_token_t & op) const {
-	return type == op.type && value == op.value;
+	if (type == op.type){
+		if (type == xctmp_token_t::TOKEN_NUM && digit == op.digit){
+			return true;
+		}
+		if (type == xctmp_token_t::TOKEN_STRING && value == op.value){
+			return true;
+		}
+	}
+	return false;
 }
 
 //========================================

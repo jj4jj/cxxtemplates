@@ -6,12 +6,10 @@
 
 typedef std::string(* xctmp_ctrler_t)(const std::string &); //token list , chk list
 
-struct xctmp_env_t : json_doc_t {};
-
 struct xctmp_token_t {
 	std::string		text; //static from tempalte buffer
 	std::string		value;//dynamic value binding
-	long	long	digit; //dyn
+	long long unsigned int	digit; //dyn
 	enum xctmp_token_type {
 		TOKEN_ERROR = -1,
 		//empty
@@ -35,7 +33,8 @@ struct xctmp_token_t {
 		TOKEN_BRACKET_LEFT,
 		TOKEN_BRACKET_RIGHT,
 	} type;
-	bool	is_op();
+	bool	is_op() const;
+	bool	is_keywords() const ;
 	int		priority() const;
 	bool	operator == (const xctmp_token_t & op) const;
 };

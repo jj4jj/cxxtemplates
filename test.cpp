@@ -11,7 +11,15 @@ string lowercase(const std::string & v){
 }
 
 int main(){
-#if 0
+#if 1
+	smatch	res;
+	regex	tre("^!([a-zA-Z]+)");
+	string sss = "!else if";
+	const char * pcs = "!else if";
+	if (regex_search(sss, res, tre)){
+		cout << "search :" << res.str(1) << std::endl;
+	}
+
     cout << "=================================" << endl;
 #endif
 
@@ -36,10 +44,11 @@ int main(){
 		comment:{{#comment}}\n\
 		var.var:{{var.var}}\n\
 		var.var+3:{{var.var+3}}\n\
-		{{!if var.var == 3}}\n\
-			hello,world!\
+		{{var.var|lowercase}}\n\
+		{{!if var.var = 3}}\n\
+			hello,world! if part(var.var=3)\n\
 		{{!else}}\n\
-			hahhaha, else \n\
+			hahhaha! else part\n\
 		{{}}\n\
 		{{!for a in var.a}}\n\
 			{{a}}\n\

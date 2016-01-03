@@ -37,8 +37,8 @@ public:
 		}
 		rapidjson::FileReadStream is(fp, parse_file_buffer, MAX_CONF_BUFF_SIZE);
 		if (ParseStream(is).HasParseError()){
-			rapidjson::ParseErrorCode e = rapidjson::Document::GetParseError();
-			size_t o = GetErrorOffset();
+			//rapidjson::ParseErrorCode e = rapidjson::Document::GetParseError();
+			//size_t o = GetErrorOffset();
 			return -1;
 		}
 		return 0;
@@ -54,8 +54,8 @@ public:
 	int					loads(const char * buffer){
 		rapidjson::StringStream	ss(buffer);
 		if (ParseStream(ss).HasParseError()){
-			rapidjson::ParseErrorCode e = GetParseError();
-			size_t o = GetErrorOffset();
+			//rapidjson::ParseErrorCode e = GetParseError();
+			//size_t o = GetErrorOffset();
 			return -1;
 		}
 		return 0;

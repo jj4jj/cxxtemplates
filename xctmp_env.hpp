@@ -24,6 +24,9 @@ struct xctmp_token_t {
 
 		//+-*/|() -----operator--------
 		TOKEN_EQ,
+		TOKEN_LT,
+		TOKEN_GT,
+
 		TOKEN_PLUS,
 		TOKEN_MINUS,
 		TOKEN_PRODUCT,
@@ -37,6 +40,9 @@ struct xctmp_token_t {
 	bool	is_keywords() const ;
 	int		priority() const;
 	bool	operator == (const xctmp_token_t & op) const;
+	bool	operator < (const xctmp_token_t & op) const;
+	bool	operator > (const xctmp_token_t & op) const;
+
 };
 
 struct xctmp_chunk_t {

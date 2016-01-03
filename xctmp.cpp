@@ -17,7 +17,7 @@
 
 //need g++4.9+
 //static const std::regex   digit_re("^[+-]?[1-9]+");
-static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*");
+static const std::regex   var_re("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)*");
 static const std::regex   str_re_1("^\"((([^\\\"]\\\")|[^\"])*)\""); //"(([^\"]\")|[^"])*"
 static const std::regex   str_re_2("^'((([^\\']\\')|[^'])*)'"); //"(([^\"]\")|[^"])*"
 static const std::regex	  ctl_re("^!([a-zA-Z]+)");
@@ -81,6 +81,16 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
             tok.text.assign(1, *pcs);
             ++pcs; //shift one char
             break;
+		case '<':
+			tok.type = xctmp_token_t::TOKEN_LT;
+			tok.text.assign(1, *pcs);
+			++pcs; //shift one char
+			break;
+		case '>':
+			tok.type = xctmp_token_t::TOKEN_GT;
+			tok.text.assign(1, *pcs);
+			++pcs; //shift one char
+			break;
         case ' ':
         case '\t':
         case '\r':
@@ -370,6 +380,14 @@ _eval_expr_step(std::stack<xctmp_token_t*> & opv,
         result.type = xctmp_token_t::TOKEN_NUM;
         result.digit = (lv == rv) ? 1 : 0;
         return result;
+	case xctmp_token_t::TOKEN_LT:
+		result.type = xctmp_token_t::TOKEN_NUM;
+		result.digit = (lv < rv) ? 1 : 0;
+		return result;
+	case xctmp_token_t::TOKEN_GT:
+		result.type = xctmp_token_t::TOKEN_NUM;
+		result.digit = (lv > rv) ? 1 : 0;
+		return result;
 
     case xctmp_token_t::TOKEN_PLUS:
 		if (lv.type == xctmp_token_t::TOKEN_NUM &&
@@ -807,6 +825,8 @@ int xctmp_token_t::priority() const {
 	//
 	switch (type){
 	case TOKEN_EQ:
+	case TOKEN_LT:
+	case TOKEN_GT:
 		return 110;
 	case TOKEN_PLUS:
 	case TOKEN_MINUS:
@@ -824,6 +844,28 @@ int xctmp_token_t::priority() const {
 	default:
 		return 50;
 	}
+}
+bool	xctmp_token_t::operator < (const xctmp_token_t & op) const {
+	if (type == op.type){
+		if (type == xctmp_token_t::TOKEN_NUM && digit < op.digit){
+			return true;
+		}
+		if (type == xctmp_token_t::TOKEN_STRING && value < op.value){
+			return true;
+		}
+	}
+	return false;
+}
+bool	xctmp_token_t::operator > (const xctmp_token_t & op) const {
+	if (type == op.type){
+		if (type == xctmp_token_t::TOKEN_NUM && digit > op.digit){
+			return true;
+		}
+		if (type == xctmp_token_t::TOKEN_STRING && value > op.value){
+			return true;
+		}
+	}
+	return false;
 }
 bool xctmp_token_t::operator == (const xctmp_token_t & op) const {
 	if (type == op.type){

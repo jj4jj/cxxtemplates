@@ -34,16 +34,20 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
         tok.text.clear();
 		tok.digit = strtoll(pcs, &pdend, 10);
 		if (*pcs == '+' || *pcs == '-' || pdend != pcs){
-			if (!toklist.empty() && !toklist.back().is_op()){
+            if ((*pcs == '+' || *pcs == '-') && !toklist.empty() && !toklist.back().is_op()){
 				tok.type = (*pcs == '+') ? xctmp_token_t::TOKEN_PLUS : xctmp_token_t::TOKEN_MINUS;
 				tok.text.assign(1, *pcs);
 				++pcs; //shift one char
 			}
-			else {
+			else if (pdend != pcs){
 				tok.type = xctmp_token_t::TOKEN_NUM;
 				tok.text.assign(pcs, pdend - pcs);
 				pcs = pdend;
 			}
+            else {
+                std::cerr << "ambigous literal(operator +/- or number(decimalism) ?): " << pcs << std::endl;
+                return -1;
+            }
 			toklist.push_back(tok);
 			continue;
 		}

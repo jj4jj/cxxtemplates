@@ -1,5 +1,5 @@
-#include "xctmp.h"
-#include "iostream"
+#include "xctmp/include/xctmp.h"
+#include <iostream>
 #include <regex>
 #include <string>
 #include <algorithm>
@@ -15,11 +15,10 @@ int main(){
 	smatch	res;
 	regex	tre("^!([a-zA-Z]+)");
 	string sss = "!else if";
-	const char * pcs = "!else if";
+	//const char * pcs = "!else if"; testing regex bug
 	if (regex_search(sss, res, tre)){
 		cout << "search :" << res.str(1) << std::endl;
 	}
-
     cout << "=================================" << endl;
 #endif
 
@@ -38,21 +37,16 @@ int main(){
 
     string output;
 	xctmp_t * xc = xctmp_parse(
-		"text:{{text}}\n\
-		int:{{int}}\n\
-		float:{{float}}\n\
-		comment:{{#comment}}\n\
-		var.var:{{var.var}}\n\
-		var.var+3:{{var.var+3}}\n\
-		{{var.var|lowercase}}\n\
-		{{!if var.var = 3}}\n\
-			hello,world! if part(var.var=3)\n\
-		{{!else}}\n\
-			hahhaha! else part\n\
-		{{}}\n\
-		{{!for a in var.a}}\n\
-			{{a}}\n\
-		{{}}");
+"text:{{text}}\n\
+int:{{int}}\n\
+float:{{float}}\n\
+comment:{{#comment}}\n\
+var.var:{{var.var}}\n\
+var.var+3:{{var.var+3}}\n\
+{{var.var|lowercase}}\n\
+{{!if var.var = 3}}hello,world! if part(var.var:{{var.var}}=3)\n\
+{{!else}}hahhaha! else part(var.var:{{var.var}}!=3){{}}\n\
+for a in var.a:{{!for a in var.a}}{{a}},{{}}");
     if (!xc){
         return -1;
     }
@@ -62,7 +56,7 @@ int main(){
 	env += to_string((uint64_t)(void*)lowercase);
 	env += "\",\"text\":\"text sample\",\"int\":2346,\"float\":23.57,\"var\":{\"var\":324,\"a\":[2,5,78]}}";
     int ret = xctmp_render(xc, output, env);
-    cout << "render:" << ret << endl
+    cout << "render state :" << ret <<  endl << "===============================" << endl
         << output << endl;
     return 0;
 }

@@ -12,23 +12,24 @@ a little light-weght cpp text template library
         struct {{struct}}{
             {{for field in fields}}
                 {{field.type}} {{field.name|lowercase}}
-                    {{if field.array}}
+                    {{!if field.array}}
                         [{{field.count}}];
-                    {{elif field.type == "message"}}
+                    {{!elif field.type = "message"}}
                         //elseif message
-                    {{else}}
+                    {{!else}}
                         //else
-                    {{}}//end if
-            {{}}//end for
+                    {{}}{{#end if}}
+            {{}}{{#end for}}
         };
-    render
-        env:  json
-        "var":{"file": "test.h", "fields": [{"type":"string", "name":"Name","$idx":"0","array": 1,"count": 5,"length":32}],"struct":"test"},
-        "filter":{"lowercase": {"addr":0x7f23e800, "prototype":"s2s"}
+    render environment //env describe with json
+        {"file": "test.h",
+        "fields": [{"type":"string", "name":"Name","$idx":"0","array": 1,"count": 5,"length":32}],
+        "struct":"test"},
+        "@lowercase": 0x7f23e800}
     output:
         #include "test.h"
         struct test {
-            string  name [5];
+            string  name[5];
         };
 
 ```

@@ -3,7 +3,7 @@
 #include <regex>
 #include <string>
 #include <algorithm>
-
+#include <fstream>
 using namespace std;
 
 string lowercase(const std::string & v){
@@ -21,40 +21,22 @@ int main(){
 	}
     cout << "=================================" << endl;
 #endif
-
-	//env
-	//vars:{"name":value}
-	//filters:{"name":address}
-	//ext:{"!if":address}
-	//!if e
-	//text1
-	//!else
-	//text2
-	//!elif
-	//!for <id>	in <id>
-	//!if <id>._idx = 0
-	//!if <id>._idx = 1+tid
-
     string output;
-	xctmp_t * xc = xctmp_parse(
-"text:{{text}}\n\
-int:{{int}}\n\
-float:{{float}}\n\
-comment:{{#comment}}\n\
-var.var:{{var.var}}\n\
-var.var+3:{{var.var+3}}\n\
-{{var.var|lowercase}}\n\
-{{!if var.var = 3}}hello,world! if part(var.var:{{var.var}}=3)\n\
-{{!else}}hahhaha! else part(var.var:{{var.var}}!=3){{}}\n\
-for a in var.a:{{!for a in var.a}}{{a}},{{}}");
+
+    ifstream ifs("test.xtp", ios::in);
+    char buffer[2048] = { 0 };
+    ifs.getline(buffer, sizeof(buffer), 0);
+    cout << "read some:" << buffer << endl;
+	xctmp_t * xc = xctmp_parse(buffer);
     if (!xc){
         return -1;
     }
+   
 	//@filter
 	//!ext
-	string env = "{\"@lowercase\":\"";
-	env += to_string((uint64_t)(void*)lowercase);
-	env += "\",\"text\":\"text sample\",\"int\":2346,\"float\":23.57,\"var\":{\"var\":324,\"a\":[2,5,78]}}";
+    xctmp_push_filter(xc, "lowercase", lowercase);
+	string env = "{\"text\":\"text sample\",\"int\":2346,\"float\":23.57,\"var\":{\"var\":324,\"a\":[2,5,78]}}";
+    cout << "env:" << endl << env << endl;
     int ret = xctmp_render(xc, output, env);
     cout << "render state :" << ret <<  endl << "===============================" << endl
         << output << endl;

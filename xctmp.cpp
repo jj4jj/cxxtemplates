@@ -137,17 +137,6 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
 				return -1;
 			}
 			break;
-		case '@':
-			if (std::regex_search(strtoks, m, func_re)){
-				tok.type = xctmp_token_t::TOKEN_FILTER;
-				tok.text = m.str(1);
-				pcs += m.length();
-			}
-			else {
-				std::cerr << "ilegal func literal :" << pcs << std::endl;
-				return -1;
-			}
-			break;
         default:
 			if (std::regex_search(strtoks, m, var_re)){
                 tok.type = xctmp_token_t::TOKEN_ID;
@@ -172,6 +161,7 @@ struct xctmp_t {
 	std::string					text;
 	std::list<xctmp_chunk_t>	chunk_list;
 	typedef std::list<xctmp_chunk_t>::iterator chunk_list_itr_t;
+    std::unordered_map<std::string, xctmp_filter_t> filters;
 };
 struct xctmp_chunk_env_t {
 	xctmp_t::chunk_list_itr_t	itr; //point to chunk
@@ -197,6 +187,7 @@ struct xctmp_chunk_env_t {
 struct xctmp_env_t {
 	json_doc_t							global;
 	std::list<xctmp_chunk_env_t>		chunks;
+    xctmp_t *                           xc;
 };
 
 xctmp_t * 
@@ -328,25 +319,13 @@ _eval_token(const xctmp_token_t & rtok_, const xctmp_env_t & env){
 		return tok;
 	}
 	else {
-		std::string juri = "/@" + tok.text;
-		_strreplace(juri, ".", "/");
-		auto v = rapidjson::Pointer(juri.c_str()).Get(env.global);
-		if (v){
-			if (v->IsString()){
-				tok.type = xctmp_token_t::TOKEN_FILTER;
-				tok.value = v->GetString();
-				assert(sizeof(long long) == sizeof(void *));
-				sscanf(tok.value.c_str(), "%llu", &tok.digit);
-			}
-			else if (v->IsUint64()){
-				tok.type = xctmp_token_t::TOKEN_FILTER;
-				tok.digit = v->GetUint64();
-			}
-			else {
-				tok.value = "error filter type of id:" + tok.text ;
-			}
-			return tok;
-		}
+        assert(sizeof(unsigned long long) == sizeof(void *));
+        auto it = env.xc->filters.find(tok.text);
+        if (it != env.xc->filters.end()){
+            tok.type = xctmp_token_t::TOKEN_FILTER;
+            tok.digit = (unsigned long long)it->second;
+            return tok;
+        }
 	}
 	tok.value = "not found the env entry of id:" + tok.text;
 	return tok;
@@ -469,14 +448,13 @@ _eval_expr_step(std::stack<xctmp_token_t*> & opv,
         }
 		result.value = "right op value :" + rv.text + " value is 0 !";
         return result;
-
     case xctmp_token_t::TOKEN_FILT:
         if (rv.type != xctmp_token_t::TOKEN_FILTER){
             result.value = "filter evaluate param type error !";
             return result;
         }
 		else {
-			xctmp_filter_t fpfilter = (xctmp_filter_t)rv.digit;
+            xctmp_filter_t fpfilter = (xctmp_filter_t)rv.digit;
 			std::string leftstr = lv.value;
 			if (lv.type == xctmp_token_t::TOKEN_NUM){
 				leftstr = std::to_string(lv.digit);
@@ -749,13 +727,27 @@ _render_end_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t &
 	}
 	return 0;
 }
+int       
+xctmp_push_filter(xctmp_t * xc, const std::string & name, xctmp_filter_t filter){
+    if (!xc || name.empty() || !filter){
+        return -1;
+    }
+    auto it = xc->filters.find(name);
+    if (it == xc->filters.end()){
+        xc->filters[name] = filter;
+        return 0;
+    }
+    else {
+        return 1;
+    }
+}
 
 int       
 xctmp_render(xctmp_t * xc, std::string & output, const std::string & jsenv){
 	auto it = xc->chunk_list.begin();
     xctmp_token_t result;
 	xctmp_env_t env;
-	//xctmp_control_flow_env_t	ctrl_env;
+    env.xc = xc;
 	int ret = env.global.loads(jsenv.c_str());
 	if (ret){
 		std::cerr << "json load error !" << std::endl;

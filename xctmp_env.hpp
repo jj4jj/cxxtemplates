@@ -7,9 +7,9 @@
 typedef std::string(* xctmp_ctrler_t)(const std::string &); //token list , chk list
 
 struct xctmp_token_t {
-	std::string		text; //static from tempalte buffer
-	std::string		value;//dynamic value binding
-	long long unsigned int	digit; //dyn
+	std::string		    text; //static from tempalte buffer
+	std::string		    value;//dynamic value binding
+    unsigned long long	digit; //dyn 
 	enum xctmp_token_type {
 		TOKEN_ERROR = -1,
 		//empty

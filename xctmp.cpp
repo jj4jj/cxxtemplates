@@ -593,8 +593,34 @@ _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t
 	if (tag.text == "if" || tag.text == "elif"){	//if expr
 		auto tok = _eval_expr(*chunkit, env);//evaluation
 		if (tok.type != xctmp_token_t::TOKEN_NUM){
-			std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
-			return -1;
+			if(tok.type == xctmp_token_t::TOKEN_STRING){
+				if(strcasecmp(tok.value.c_str(), "yes") == 0 ||
+					strcasecmp(tok.value.c_str(), "true") == 0){
+					tok.type = xctmp_token_t::TOKEN_NUM;
+					tok.digit = 1;
+				}
+				else if(strcasecmp(tok.value.c_str(), "no") == 0 ||
+					strcasecmp(tok.value.c_str(), "false") == 0){
+					tok.type = xctmp_token_t::TOKEN_NUM;
+					tok.digit = 0;
+				}
+				else {
+					char * p = NULL;
+					tok.digit = strtol(tok.value.c_str(), &p, 10);
+					if(p != tok.value.c_str()){
+						tok.type = xctmp_token_t::TOKEN_NUM;
+					}
+					else {
+						std::cerr << "error bool expression value: " << tok.value << std::endl;
+						std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
+						return -1;
+					}
+				}
+			}
+			else {
+				std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
+				return -1;
+			}
 		}
 		if (tag.text == "if"){ //create if env
 			env.chunks.push_back(xctmp_chunk_env_t());

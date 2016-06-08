@@ -85,6 +85,11 @@ _expr_parse(std::list<xctmp_token_t> & toklist, const std::string & text){
             tok.text.assign(1, *pcs);
             ++pcs; //shift one char
             break;
+        case ':':
+            tok.type = xctmp_token_t::TOKEN_AS;
+            tok.text.assign(1, *pcs);
+            ++pcs; //shift one char
+            break;
 		case '<':
 			tok.type = xctmp_token_t::TOKEN_LT;
 			tok.text.assign(1, *pcs);
@@ -162,8 +167,10 @@ struct xctmp_t {
 	std::list<xctmp_chunk_t>	chunk_list;
 	typedef std::list<xctmp_chunk_t>::iterator chunk_list_itr_t;
     std::unordered_map<std::string, xctmp_filter_t> filters;
+    std::unordered_map<std::string, xctmp_token_t>  vars;
 };
 struct xctmp_chunk_env_t {
+    std::unordered_map<std::string, xctmp_token_t>  vars;
 	xctmp_t::chunk_list_itr_t	itr; //point to chunk
 	struct loop_env_t {
 		int						idx;
@@ -334,7 +341,7 @@ _eval_token(const xctmp_token_t & rtok_, const xctmp_env_t & env){
 static inline xctmp_token_t
 _eval_expr_step(std::stack<xctmp_token_t*> & opv,
 		std::stack<xctmp_token_t*> & opt,
-		const xctmp_env_t & env){
+		xctmp_env_t & env){
     xctmp_token_t result;
     result.type = xctmp_token_t::TOKEN_ERROR;
 	if (opv.empty()){
@@ -349,15 +356,17 @@ _eval_expr_step(std::stack<xctmp_token_t*> & opv,
     auto left = opv.top();
     opv.pop();
 
-	auto lv = _eval_token(*left, env);
-	auto rv = _eval_token(*right, env);
-	if (lv.type == xctmp_token_t::TOKEN_ERROR ||
-		rv.type == xctmp_token_t::TOKEN_ERROR){
-		result.value = "error token value get => left: " + lv.text + " value: " + lv.value +
-						" right: " + rv.text + " value: " + rv.value;
-		return result;
-	}
-
+    xctmp_token_t lv = *left, rv = *right;
+    if (op->type != xctmp_token_t::TOKEN_AS){
+        lv = _eval_token(*left, env);
+        rv = _eval_token(*right, env);
+        if (lv.type == xctmp_token_t::TOKEN_ERROR ||
+            rv.type == xctmp_token_t::TOKEN_ERROR){
+            result.value = "error token value get => left: " + lv.text + " value: " + lv.value +
+                " right: " + rv.text + " value: " + rv.value;
+            return result;
+        }
+    }
     switch (op->type){
     case xctmp_token_t::TOKEN_EQ:
         result.type = xctmp_token_t::TOKEN_NUM;
@@ -463,6 +472,17 @@ _eval_expr_step(std::stack<xctmp_token_t*> & opv,
 			result.value = fpfilter(leftstr);
 			return result;
 		}
+    case xctmp_token_t::TOKEN_AS:
+        if (lv.type != xctmp_token_t::TOKEN_ID){
+            result.value = "as evaluate param type error !";
+            return result;
+        }
+        else {
+            std::string leftstr = lv.text;
+            xctmp_chunk_env_t & cenv = env.chunks.back();
+            cenv.vars[leftstr] = rv;
+            return rv;
+        }
     default:
 		result.value = "unknown operator :" + op->text;
         return result;
@@ -473,7 +493,7 @@ _eval_expr_reduce(std::stack<xctmp_token_t*> &opv,
 		std::stack<xctmp_token_t*> & opt,
 		const xctmp_token_t & tok,
 		std::vector<xctmp_token_t> & _store_token,
-		const xctmp_env_t & env){
+		xctmp_env_t & env){
 	xctmp_token_t error_value;
 	error_value.type = xctmp_token_t::TOKEN_ERROR;
 	if (opv.size() == 1){ //just one opvalue
@@ -542,7 +562,7 @@ _eval_expr_reduce(std::stack<xctmp_token_t*> &opv,
 //eval  lop
 //push  cop
 static inline xctmp_token_t
-_eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
+_eval_expr(const xctmp_chunk_t & chk, xctmp_env_t & env){
     //std::clog << "parsing: "<< chk.text << std::endl;
     xctmp_token_t     result_value;
     result_value.type = xctmp_token_t::TOKEN_ERROR;
@@ -585,88 +605,111 @@ _eval_expr(const xctmp_chunk_t & chk, const xctmp_env_t & env){
     return result_value;
 }
 
+static inline  int
+_eval_bool_expr(xctmp_token_t & tok, const xctmp_chunk_t & chk, xctmp_env_t & env){
+    tok = _eval_expr(chk, env); //evaluation bool
+    if (tok.type != xctmp_token_t::TOKEN_NUM){
+        if (tok.type == xctmp_token_t::TOKEN_STRING){
+            if (strcasecmp(tok.value.c_str(), "yes") == 0 ||
+                strcasecmp(tok.value.c_str(), "true") == 0){
+                tok.type = xctmp_token_t::TOKEN_NUM;
+                tok.digit = 1;
+            }
+            else if (strcasecmp(tok.value.c_str(), "no") == 0 ||
+                strcasecmp(tok.value.c_str(), "false") == 0){
+                tok.type = xctmp_token_t::TOKEN_NUM;
+                tok.digit = 0;
+            }
+            else {
+                char * p = NULL;
+                tok.digit = strtol(tok.value.c_str(), &p, 10);
+                if (p != tok.value.c_str()){
+                    tok.type = xctmp_token_t::TOKEN_NUM;
+                }
+                else {
+                    std::cerr << "error bool expression value: " << tok.value << std::endl;
+                    return -1;
+                }
+            }
+        }
+        else {
+            std::cerr << "error bool expresson token type:" << tok.type << " value:" << tok.value << std::endl;
+            return -1;
+        }
+    }
+    return 0;
+}
+static inline int 
+_branch_skip_block(xctmp_t* xc, std::string & tag, xctmp_t::chunk_list_itr_t & chunkit){
+    int skip_block_layer = 0;
+    //std::clog << "branch tag: ["<< tag << "] branch skip chunk..." << chunkit->text << std::endl;
+    while (chunkit != xc->chunk_list.end()){
+        //std::clog << "check chunk type: " << chunkit->type << " text: " << chunkit->text << std::endl;
+        if (chunkit->type == xctmp_chunk_t::CHUNK_BLOCK_CTL){
+            const std::string & mtag = chunkit->toklist.begin()->text;
+            if (mtag == "if" || mtag == "for"){
+                //std::clog << "skip block begin" << std::endl;
+                ++skip_block_layer;
+            }
+            if (skip_block_layer == 0){
+                if ((tag == "if" || tag == "elif") &&
+                    (mtag == "else" || mtag == "elif")){
+                    --chunkit;
+                    return 0;
+                }
+            }
+        }
+        else if (chunkit->type == xctmp_chunk_t::CHUNK_BLOCK_END){
+            if (0 == skip_block_layer){
+                --chunkit;
+                return 0;
+            }
+            else {
+                --skip_block_layer;
+                //std::clog << "skip block end " << std::endl;
+            }
+        }
+        ++chunkit;
+    }
+    return -1;
+}
+
 static inline int 
 _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t & chunkit, xctmp_env_t & env){
 	auto tokit = chunkit->toklist.begin();
 	auto & tag = *tokit;
 	++tokit;
-	if (tag.text == "if" || tag.text == "elif"){	//if expr
-		auto tok = _eval_expr(*chunkit, env);//evaluation
-		if (tok.type != xctmp_token_t::TOKEN_NUM){
-			if(tok.type == xctmp_token_t::TOKEN_STRING){
-				if(strcasecmp(tok.value.c_str(), "yes") == 0 ||
-					strcasecmp(tok.value.c_str(), "true") == 0){
-					tok.type = xctmp_token_t::TOKEN_NUM;
-					tok.digit = 1;
-				}
-				else if(strcasecmp(tok.value.c_str(), "no") == 0 ||
-					strcasecmp(tok.value.c_str(), "false") == 0){
-					tok.type = xctmp_token_t::TOKEN_NUM;
-					tok.digit = 0;
-				}
-				else {
-					char * p = NULL;
-					tok.digit = strtol(tok.value.c_str(), &p, 10);
-					if(p != tok.value.c_str()){
-						tok.type = xctmp_token_t::TOKEN_NUM;
-					}
-					else {
-						std::cerr << "error bool expression value: " << tok.value << std::endl;
-						std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
-						return -1;
-					}
-				}
-			}
-			else {
-				std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
-				return -1;
-			}
-		}
-		if (tag.text == "if"){ //create if env
-			env.chunks.push_back(xctmp_chunk_env_t());
-			auto & chenv = env.chunks.back();
-			chenv.itr = chunkit;
-		}
-		if (tok.digit != 0){ //true , sequence excute
-			env.chunks.back().branch_.pred = true;
-			return 0;
-		}
-		else {
-			env.chunks.back().branch_.pred = false; // until to next branch
-			++chunkit;
-			while (chunkit != xc->chunk_list.end()){
-				if (chunkit->type == xctmp_chunk_t::CHUNK_BLOCK_CTL)
-				{
-					if (chunkit->toklist.begin()->text == "else" ||
-						chunkit->toklist.begin()->text == "elif"){
-						--chunkit;
-						return 0;
-					}
-				}
-				else if (chunkit->type == xctmp_chunk_t::CHUNK_BLOCK_END){
-					--chunkit;
-					return 0;
-				}
-				++chunkit;
-			}
-			std::cerr << "error branch syntax , not found a pair match if else/elif/end" << std::endl;
-			return -1;
-		}		
-	}
-	else if (tag.text == "else"){ //else
-		if (env.chunks.back().branch_.pred){ //ignore else (false)
-			++chunkit;
-			while (chunkit != xc->chunk_list.end()){
-				if (chunkit->type == xctmp_chunk_t::CHUNK_BLOCK_END){
-					--chunkit;
-					return 0;
-				}
-				++chunkit;
-			}
-			std::cerr << "not match the branch syntax , not found block end '{{}}'";
-			return -1;
-		}
-		return 0;
+	if (tag.text == "if" || tag.text == "elif" || tag.text == "else"){	//if expr
+        //true or n
+        if ( tag.text == "if" ||
+            (tag.text == "elif" && false == env.chunks.back().branch_.pred)){
+            xctmp_token_t tok;
+            if (_eval_bool_expr(tok, *chunkit, env)){
+                std::cerr << "eval expression error chunk:" << chunkit->text << std::endl;
+                return -1;
+            }
+            if (tag.text == "if"){ //create if env
+                env.chunks.push_back(xctmp_chunk_env_t());
+                auto & chenv = env.chunks.back();
+                chenv.itr = chunkit;
+            }
+            if (tok.digit != 0){ //true , sequence excute
+                env.chunks.back().branch_.pred = true;
+                return 0;
+            }
+            else {
+                env.chunks.back().branch_.pred = false; // until to next branch
+            }
+        }
+        if (tag.text == "else" && false == env.chunks.back().branch_.pred){
+            return 0;
+        }
+        ++chunkit;
+        if (_branch_skip_block(xc, tag.text, chunkit)){
+            std::cerr << "error branch syntax , not found a pair match if else/elif/end" << std::endl;
+            return -1;
+        }
+        return 0;
 	}
 	else if (tag.text == "for"){ //for <v> in <v>(array)
 		//create env
@@ -754,6 +797,42 @@ _render_end_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t &
 	return 0;
 }
 int       
+xctmp_push_n(xctmp_t * xc, const std::string & name, int64_t i){
+    if (!xc || name.empty()){
+        return -1;
+    }
+    auto it = xc->vars.find(name);
+    if (it == xc->vars.end()){
+        xctmp_token_t tok;
+        tok.type = xctmp_token_t::TOKEN_NUM,
+            tok.digit = i;
+        tok.text = std::to_string(i);
+        xc->vars[name] = tok;
+        return 0;
+    }
+    else {
+        return 1;
+    }
+}
+int       
+xctmp_push_s(xctmp_t * xc, const std::string & name, const std::string & str){
+    if (!xc || name.empty()){
+        return -1;
+    }
+    auto it = xc->vars.find(name);
+    if (it == xc->vars.end()){
+        xctmp_token_t tok;
+        tok.type = xctmp_token_t::TOKEN_STRING;
+        tok.value = str;
+        tok.text = str;
+        xc->vars[name] = tok;
+        return 0;
+    }
+    else {
+        return 1;
+    }
+}
+int       
 xctmp_push_filter(xctmp_t * xc, const std::string & name, xctmp_filter_t filter){
     if (!xc || name.empty() || !filter){
         return -1;
@@ -773,6 +852,7 @@ xctmp_render(xctmp_t * xc, std::string & output, const std::string & jsenv){
 	auto it = xc->chunk_list.begin();
     xctmp_token_t result;
 	xctmp_env_t env;
+    env.chunks.push_back(xctmp_chunk_env_t()); //base global
     env.xc = xc;
 	int ret = env.global.loads(jsenv.c_str());
 	if (ret){
@@ -844,8 +924,9 @@ bool xctmp_token_t::is_keywords() const{
 int xctmp_token_t::priority() const {
 	//common	50
 	//op 100 - 200	()
-	//
 	switch (type){
+    case TOKEN_AS:
+        return 100;
 	case TOKEN_EQ:
 	case TOKEN_LT:
 	case TOKEN_GT:

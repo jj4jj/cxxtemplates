@@ -22,8 +22,9 @@ struct xctmp_token_t {
 		TOKEN_FILTER,
 		TOKEN_CTRLER,
 
-		//+-*/|() -----operator--------
-		TOKEN_EQ,
+		//<-,+-*/|() -----operator--------
+        TOKEN_AS,   
+        TOKEN_EQ,
 		TOKEN_LT,
 		TOKEN_GT,
 

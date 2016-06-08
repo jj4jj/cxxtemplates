@@ -167,7 +167,9 @@ struct xctmp_t {
 	std::list<xctmp_chunk_t>	chunk_list;
 	typedef std::list<xctmp_chunk_t>::iterator chunk_list_itr_t;
     std::unordered_map<std::string, xctmp_filter_t> filters;
-    std::unordered_map<std::string, xctmp_token_t>  vars;
+    std::unordered_map<std::string, std::vector<xctmp_token_t>>  avars;
+    std::unordered_map<std::string, xctmp_token_t>               svars;
+
 };
 struct xctmp_chunk_env_t {
     std::unordered_map<std::string, xctmp_token_t>  vars;
@@ -796,36 +798,90 @@ _render_end_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t &
 	}
 	return 0;
 }
+void
+xctmp_pop(xctmp_t * xc, const std::string & name){
+    if (!xc || name.empty()){
+        return;
+    }
+    xc->avars.erase(name);
+    xc->svars.erase(name);
+}
 int       
 xctmp_push_n(xctmp_t * xc, const std::string & name, int64_t i){
     if (!xc || name.empty()){
         return -1;
     }
-    auto it = xc->vars.find(name);
-    if (it == xc->vars.end()){
+    auto it = xc->svars.find(name);
+    if (it == xc->svars.end()){
         xctmp_token_t tok;
         tok.type = xctmp_token_t::TOKEN_NUM,
             tok.digit = i;
         tok.text = std::to_string(i);
-        xc->vars[name] = tok;
+        xc->svars.insert(std::make_pair(name, tok));
         return 0;
     }
     else {
         return 1;
     }
 }
+int       xctmp_push_vn(xctmp_t * xc, const std::string & name, const std::vector<int64_t> &     vn){
+    if (!xc || name.empty()){
+        return -1;
+    }
+    auto it = xc->avars.find(name);
+    xctmp_token_t tok;
+    tok.type = xctmp_token_t::TOKEN_NUM;
+    if (it == xc->avars.end()){
+        xc->avars.insert(std::make_pair(name, std::vector<xctmp_token_t>()));
+        std::vector<xctmp_token_t> & vsn = xc->avars[name];
+        for (auto n : vn){
+            tok.digit = n;
+            vsn.push_back(tok);
+        }
+    }
+    else {
+        for (auto n : vn){
+            tok.digit = n;
+            it->second.push_back(tok);
+        }
+    }
+    return 0;
+}
+int       xctmp_push_vs(xctmp_t * xc, const std::string & name, const std::vector<std::string> & vs){
+    if (!xc || name.empty()){
+        return -1;
+    }
+    auto it = xc->avars.find(name);
+    xctmp_token_t tok;
+    tok.type = xctmp_token_t::TOKEN_STRING;
+    if (it == xc->avars.end()){
+        xc->avars.insert(std::make_pair(name, std::vector<xctmp_token_t>()));
+        std::vector<xctmp_token_t> & vsn = xc->avars[name];
+        for (auto & s : vs){
+            tok.value = s;
+            vsn.push_back(tok);
+        }
+    }
+    else {
+        for (auto & s : vs){
+            tok.value = s;
+            it->second.push_back(tok);
+        }
+    }
+    return 0;
+}
 int       
 xctmp_push_s(xctmp_t * xc, const std::string & name, const std::string & str){
     if (!xc || name.empty()){
         return -1;
     }
-    auto it = xc->vars.find(name);
-    if (it == xc->vars.end()){
+    auto it = xc->svars.find(name);
+    if (it == xc->svars.end()){
         xctmp_token_t tok;
         tok.type = xctmp_token_t::TOKEN_STRING;
         tok.value = str;
         tok.text = str;
-        xc->vars[name] = tok;
+        xc->svars[name] = tok;
         return 0;
     }
     else {

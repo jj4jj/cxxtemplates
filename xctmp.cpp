@@ -707,7 +707,7 @@ _eval_bool_expr(xctmp_token_t & tok, const xctmp_chunk_t & chk, xctmp_env_t & en
     return 0;
 }
 static inline int 
-_branch_skip_block(xctmp_t* xc, std::string & tag, xctmp_t::chunk_list_itr_t & chunkit){
+_skip_block_to_end(xctmp_t* xc, const std::string & tag, xctmp_t::chunk_list_itr_t & chunkit){
     int skip_block_layer = 0;
     //std::clog << "branch tag: ["<< tag << "] branch skip chunk..." << chunkit->text << std::endl;
     while (chunkit != xc->chunk_list.end()){
@@ -772,7 +772,7 @@ _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t
             return 0;
         }
         ++chunkit;
-        if (_branch_skip_block(xc, tag.text, chunkit)){
+        if (_skip_block_to_end(xc, tag.text, chunkit)){
             std::cerr << "error branch syntax , not found a pair match if else/elif/end" << std::endl;
             return -1;
         }
@@ -798,10 +798,6 @@ _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t
 			std::cerr << "error for syntax the array name not a id !" << tokit->text << std::endl;
 			return -1;
 		}
-		//create for block
-		env.chunks.push_back(xctmp_chunk_env_t());
-		auto & chenv = env.chunks.back();
-		chenv.itr = chunkit;
 		auto v = _find_env_value(arrayname, -1, env);
 		if (!v){
 			std::cerr << "error array name ,not found in env define !" << tokit->text << std::endl;
@@ -811,20 +807,29 @@ _render_begin_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t
 			std::cerr << "error for array id , not a array type !" << tokit->text << std::endl;
 			return -1;
 		}
+        int atotal = v->Size();
+        if (atotal == 0){
+            if (_skip_block_to_end(xc, "for", chunkit)){
+                std::cerr << "syntax error : not found for end pair :" << std::endl;
+                return -1;
+            }
+            ++chunkit;//skip end block
+            return 0;
+        }
+        const rapidjson::Value	* loopv = _find_env_value(arrayname, 0, env);
+        if (!loopv){
+            std::cerr << "not found the value index by 0 array name:" << arrayname << std::endl;
+            return -1;
+        }
+        //create for block
+        env.chunks.push_back(xctmp_chunk_env_t());
+        auto & chenv = env.chunks.back();
+        chenv.itr = chunkit;
 		chenv.loop_.itrname = itrname;
 		chenv.loop_.arrayname = arrayname;
 		chenv.loop_.idx = 0;
-		chenv.loop_.total = v->Size();
-		chenv.loop_.value = _find_env_value(arrayname, 0, env);
-		if (!chenv.loop_.value){
-			std::cerr << "not found the value index by 0 array name:"<< arrayname << std::endl;
-			return -1;
-		}
-		if (chenv.loop_.idx >= chenv.loop_.total){
-			//to end
-			while ((++chunkit)->type != xctmp_chunk_t::CHUNK_BLOCK_END);
-			--chunkit;
-		}
+        chenv.loop_.total = atotal;
+        chenv.loop_.value = loopv;
 		return 0;
 	}
 	else {
@@ -855,7 +860,6 @@ _render_end_block(xctmp_t* xc, std::string & output, xctmp_t::chunk_list_itr_t &
 					return -1;
 				}
 				chunkit = chk;//goto begin 
-				chunkit++; //next one
 				return 0;
 			}
 		}

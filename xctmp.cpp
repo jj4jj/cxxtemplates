@@ -169,7 +169,6 @@ struct xctmp_t {
     std::unordered_map<std::string, xctmp_filter_t> filters;
     std::unordered_map<std::string, std::vector<xctmp_token_t>>  avars;
     std::unordered_map<std::string, xctmp_token_t>               svars;
-
 };
 struct xctmp_chunk_env_t {
     std::unordered_map<std::string, xctmp_token_t>  vars;
@@ -274,6 +273,20 @@ _find_env_value(const std::string & jpuri, int idx, const xctmp_env_t & env){
 				return v;
 			}
 		}
+        else { //chunk vars as state v: value
+            auto vit = it->vars.find(jpuri);
+            if (vit != it->vars.end()){
+                static rapidjson::Value vsv;
+                if (vit->second.type == xctmp_token_t::TOKEN_NUM){
+                    vsv.SetInt64(vit->second.digit);
+                }
+                else {
+                    vsv.SetString(vit->second.value.c_str(), vit->second.value.length() + 1);
+                }
+                return &vsv;
+            }
+        }
+
 		it++;
 	}
 	std::string jpt = "/" + jpuri;
@@ -282,6 +295,49 @@ _find_env_value(const std::string & jpuri, int idx, const xctmp_env_t & env){
 	}
 	_strreplace(jpt, ".", "/");
 	v = _find_value_by_path(jpt, env.global);
+    if (!v){
+        static rapidjson::Document sv;
+        auto sit = env.xc->svars.find(jpuri);
+        if (sit != env.xc->svars.end()){
+            if (sit->second.type == xctmp_token_t::TOKEN_NUM){
+                sv.SetInt64(sit->second.digit);
+            }
+            else {
+                sv.SetString(sit->second.value.c_str(), sit->second.value.length()+1);
+            }
+            return &sv;
+        }
+        auto ait = env.xc->avars.find(jpuri);
+        if (ait != env.xc->avars.end()){
+            if (idx < 0){
+                sv.SetArray();
+                for (auto & tk : ait->second){
+                    if (tk.type == xctmp_token_t::TOKEN_NUM){
+                        rapidjson::Value vt;
+                        vt.SetInt64(tk.digit);
+                        sv.PushBack(vt, sv.GetAllocator());
+                    }
+                    else {
+                        rapidjson::Value vt;
+                        vt.SetString(tk.value.c_str(), tk.value.length() + 1);
+                        sv.PushBack(vt, sv.GetAllocator());
+                    }
+                    return &sv;
+                }
+            }
+            else {
+                assert(idx < (int)ait->second.size());
+                if (ait->second[idx].type == xctmp_token_t::TOKEN_NUM){
+                    sv.SetInt64(ait->second[idx].digit);
+                }
+                else {
+                    sv.SetString(ait->second[idx].value.c_str(), ait->second[idx].value.length() + 1);
+                }
+                return &sv;
+            }
+        }
+
+    }
 	return v;
 }
 
@@ -334,6 +390,12 @@ _eval_token(const xctmp_token_t & rtok_, const xctmp_env_t & env){
             tok.type = xctmp_token_t::TOKEN_FILTER;
             tok.digit = (unsigned long long)it->second;
             return tok;
+        }
+        else {
+            auto sit = env.xc->svars.find(tok.text);
+            if (sit != env.xc->svars.end()){
+                return sit->second;
+            }
         }
 	}
 	tok.value = "not found the env entry of id:" + tok.text;

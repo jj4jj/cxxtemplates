@@ -268,6 +268,9 @@ _find_env_value(const std::string & jpuri, int idx, const xctmp_env_t & env){
 			}
 			auto jpt = jpuri.substr(it->loop_.itrname.length());
 			_strreplace(jpt, ".", "/");
+            if (idx >= 0){
+                jpt += "/" + std::to_string(idx);
+            }
 			v = _find_value_by_path(jpt, *it->loop_.value);
 			if (v){
 				return v;

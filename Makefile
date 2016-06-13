@@ -1,15 +1,16 @@
-install:libxctmp.a xctmp.h
-	mkdir -p xctmp/include
-	mkdir -p xctmp/lib
-	cp -f libxctmp.a xctmp/lib/
-	cp -f xctmp.h xctmp/include/
 
-test: libxctmp.a test.cpp install
-	g++ test.cpp -Lxctmp/lib/ -lxctmp -o test --std=c++11 -g -Wall
+install:libxctmp.a src/xctmp.h
+	mkdir -p include
+	mkdir -p lib
+	mv libxctmp.a lib/
+	cp -f src/xctmp.h include/
 
-libxctmp.a: xctmp.cpp
-	g++ -c xctmp.cpp --std=c++11 -g3 -Wall
-	ar r libxctmp.a xctmp.o
+test:./test/test.cpp lib/libxctmp.a
+	g++ test/test.cpp -Iinclude -Llib/ -lxctmp -o test/test --std=c++11 -g3 -Wall
+
+libxctmp.a:src/xctmp.cpp
+	g++ -c src/xctmp.cpp --std=c++11 -I. -g -O2 -Wall
+	ar -rcs libxctmp.a xctmp.o
 	rm -f xctmp.o
 
 clean:

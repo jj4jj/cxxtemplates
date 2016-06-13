@@ -1,0 +1,34 @@
+#include <iostream>
+
+
+text:{{text}}
+int:{{int}}
+float:{{float}}
+comment:{{#comment}}
+var.var:{{var.var}}
+var.var+3:{{var.var+3}}
+{{var.var|lowercase}}
+{{!if var.var = 3}}
+hello,world!
+if part(var.var:{{var.var}}=3)
+{{!elif var.var}}
+iffffffffffffff
+{{!else}}
+    hahhaha! else part(var.var:{{var.var}}!=3)
+{{}}
+for a in var.a:
+{{!for a in var.a}}
+{{!if a}}
+if a
+{{!else}}
+    {{a}},
+    {{!if a=2}}
+    a=1
+    {{!elif a=5}}
+    a=3
+    {{!else}}
+    else
+    {{}}
+   {{}}
+{{}};
+`

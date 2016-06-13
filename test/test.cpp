@@ -1,4 +1,4 @@
-#include "xctmp/include/xctmp.h"
+#include "xctmp.h"
 #include <iostream>
 #include <regex>
 #include <string>

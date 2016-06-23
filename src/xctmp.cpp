@@ -325,8 +325,8 @@ _find_env_value(const std::string & jpuri, int idx, const xctmp_env_t & env){
                         vt.SetString(tk.value.c_str(), tk.value.length() + 1);
                         sv.PushBack(vt, sv.GetAllocator());
                     }
-                    return &sv;
                 }
+                return &sv;
             }
             else {
                 assert(idx < (int)ait->second.size());

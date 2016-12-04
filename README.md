@@ -1,9 +1,9 @@
 # cxxtemplates
 a little light-weght cpp text template library
 
- *. variable replace
- *. logic branch
- *. loop structure
+ * variable replace
+ * logic branch
+ * loop structure
 
 
 ##examples##
